@@ -36,6 +36,9 @@ export function AuthProvider({ children, controller, ...options }: AuthProviderP
         reloadUser: async () => {
           await ctrl.reloadUser();
         },
+        restore: async () => {
+          await ctrl.restore();
+        },
       }),
     [state, ctrl],
   );

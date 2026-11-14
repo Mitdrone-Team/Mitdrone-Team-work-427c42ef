@@ -6,6 +6,8 @@ import {
   getErrorMessage,
   useAdminProducts,
   useApproveProduct,
+  useBackendOfferQueue,
+  useBackendReviewOffer,
   useDeleteProductAdmin,
   useFlagProduct,
 } from '@mitdrone/sdk';
@@ -49,7 +51,12 @@ type Pending =
   | { kind: 'delete'; products: Product[]; done?: () => void }
   | { kind: 'approve'; products: Product[]; done?: () => void };
 
-export function ProductsTable() {
+export function ProductsTable({
+  useBackend = false,
+}: {
+  /** When true, fetch from backend offer queue instead of mock admin API. */
+  useBackend?: boolean;
+}) {
   const { can } = useAuth();
   const url = useUrlState();
   const status = url.get('status') as ProductStatus | undefined;
@@ -60,8 +67,19 @@ export function ProductsTable() {
     ...(vendor ? { vendor } : {}),
     ...(q ? { q } : {}),
   };
-  const list = useAdminProducts({ page: url.page, pageSize: 10, ...filters });
+  const backendQueue = useBackendOfferQueue();
+  const mockList = useAdminProducts({ page: url.page, pageSize: 10, ...filters });
+  const list = useBackend
+    ? {
+        data: (backendQueue.data as { data: unknown[]; meta: { page: number; pageSize: number; total: number; totalPages: number } } ?? { data: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } }),
+        isPending: backendQueue.isPending,
+        isError: backendQueue.isError,
+        error: backendQueue.error as Error | null,
+        refetch: backendQueue.refetch,
+      }
+    : mockList;
   const approve = useApproveProduct();
+  const review = useBackendReviewOffer();
   const flag = useFlagProduct();
   const del = useDeleteProductAdmin();
   const [pending, setPending] = useState<Pending>();
@@ -208,7 +226,7 @@ export function ProductsTable() {
       />
       <DataTable
         columns={columns}
-        data={list.data?.data ?? []}
+        data={Array.isArray(list.data?.data) ? (list.data.data as Product[]) : []}
         isLoading={list.isPending}
         searchable={false}
         enableSelection={write}
@@ -242,14 +260,14 @@ export function ProductsTable() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setPending({ kind: 'approve', products: rows, done: clear })}
+              onClick={() => setPending({ kind: 'approve', products: rows as Product[], done: clear })}
             >
               <CheckCircle2 /> Approve
             </Button>
             <Button
               size="sm"
               variant="destructive"
-              onClick={() => setPending({ kind: 'delete', products: rows, done: clear })}
+              onClick={() => setPending({ kind: 'delete', products: rows as Product[], done: clear })}
             >
               <Trash2 /> Delete
             </Button>
@@ -279,11 +297,19 @@ export function ProductsTable() {
         confirmLabel="Approve"
         onConfirm={async () => {
           if (pending?.kind !== 'approve') return;
-          const r = await Promise.allSettled(
-            pending.products.map((p) => approve.mutateAsync(p.id)),
-          );
-          toast.success(`${r.filter((x) => x.status === 'fulfilled').length} approved`);
-          pending.done?.();
+          if (useBackend) {
+            const r = await Promise.allSettled(
+              pending.products.map((p) => review.mutateAsync({ id: p.id, body: { expectedVersion: 1, reason: '', decision: 'APPROVE' } })),
+            );
+            toast.success(`${r.filter((x) => x.status === 'fulfilled').length} approved`);
+            pending.done?.();
+          } else {
+            const r = await Promise.allSettled(
+              pending.products.map((p) => approve.mutateAsync(p.id)),
+            );
+            toast.success(`${r.filter((x) => x.status === 'fulfilled').length} approved`);
+            pending.done?.();
+          }
         }}
       />
       <ConfirmDialog

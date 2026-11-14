@@ -1,6 +1,6 @@
 'use client';
 
-import { getErrorMessage, useMyOrders } from '@mitdrone/sdk';
+import { getErrorMessage, useBackendOrders, useMyOrders } from '@mitdrone/sdk';
 import {
   Button,
   EmptyState,
@@ -11,10 +11,13 @@ import {
   cn,
 } from '@mitdrone/ui';
 import { formatDate, formatMoney } from '@mitdrone/utils';
+
 import { Package } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
+
+import type { Money } from '@mitdrone/types';
 
 const FILTERS = [
   ['', 'All'],
@@ -25,10 +28,46 @@ const FILTERS = [
   ['cancelled', 'Cancelled'],
 ] as const;
 
-export function OrdersList() {
+interface BackendOrderItem {
+  id: string;
+  productId: string;
+  title: string;
+  imageUrl?: string;
+}
+
+interface BackendOrder {
+  id: string;
+  number: string;
+  status: string;
+  createdAt: string;
+  items: BackendOrderItem[];
+  total: Money;
+}
+
+interface BackendOrdersResponse {
+  data: BackendOrder[];
+  meta: { page: number; pageSize: number; total: number; totalPages: number };
+}
+
+export function OrdersList({
+  useBackend = false,
+}: {
+  /** When true, fetch orders from backend endpoints instead of mock account API. */
+  useBackend?: boolean;
+}) {
   const [status, setStatus] = useState('');
   const [page, setPage] = useState(1);
-  const orders = useMyOrders({ page, pageSize: 8, ...(status ? { status } : {}) });
+  const backend = useBackendOrders({ page, limit: 8 });
+  const mock = useMyOrders({ page, pageSize: 8, ...(status ? { status } : {}) });
+  const orders = useBackend
+    ? {
+        data: (backend.data as BackendOrdersResponse ?? { data: [], meta: { page: 1, pageSize: 8, total: 0, totalPages: 1 } }),
+        isPending: backend.isPending,
+        isError: backend.isError,
+        error: backend.error as Error | null,
+        refetch: backend.refetch,
+      }
+    : mock;
 
   return (
     <div className="space-y-6">

@@ -10,7 +10,7 @@ import { ProductPurchase } from '@/components/product/product-purchase';
 import { RatingStars } from '@/components/product/rating-stars';
 import { RentalRequest } from '@/components/product/rental-request';
 import { ReviewsSection } from '@/components/product/reviews';
-import { getCategories, getProduct, getProducts, getReviews } from '@/lib/data';
+import { getBackendOfferAvailability, getCategories, getProduct, getProducts, getReviews } from '@/lib/data';
 import { jsonLdString, productJsonLd, sanitizeDescription } from '@/lib/seo';
 
 import type { Metadata } from 'next';
@@ -45,9 +45,12 @@ export default async function ProductPage({ params }: Props) {
   const product = await getProduct((await params).slug);
   const categories = await getCategories();
   const category = categories.find((c) => c.id === product.categoryIds[0]);
-  const [reviews, related] = await Promise.all([
+  const [reviews, related, availability] = await Promise.all([
     getReviews(product.id, { pageSize: 5 }),
     category ? getProducts({ category: category.slug, pageSize: 5 }) : Promise.resolve(null),
+    product.listingType === 'rent'
+      ? getBackendOfferAvailability(product.id)
+      : Promise.resolve(undefined),
   ]);
   const others = related?.data.filter((p) => p.id !== product.id).slice(0, 4) ?? [];
   const isRental = product.listingType === 'rent';
@@ -89,7 +92,7 @@ export default async function ProductPage({ params }: Props) {
             <p className="text-muted-foreground">{product.shortDescription}</p>
           </div>
 
-          {isRental ? <RentalRequest product={product} /> : <ProductPurchase product={product} />}
+          {isRental ? <RentalRequest product={product} availability={availability} /> : <ProductPurchase product={product} />}
 
           <ul className="bg-muted/40 space-y-3 rounded-xl border p-4 text-sm">
             <li className="flex gap-3">

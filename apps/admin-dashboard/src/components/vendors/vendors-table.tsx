@@ -1,7 +1,12 @@
 'use client';
 
 import { useAuth } from '@mitdrone/auth';
-import { api, getErrorMessage, useAdminVendors } from '@mitdrone/sdk';
+import {
+  api,
+  getErrorMessage,
+  useAdminVendors,
+  useBackendOrganizations,
+} from '@mitdrone/sdk';
 import {
   Button,
   ConfirmDialog,
@@ -51,7 +56,12 @@ const TYPES: [string, string][] = [
   ['renter', 'Renter'],
 ];
 
-export function VendorsTable() {
+export function VendorsTable({
+  useBackend = false,
+}: {
+  /** When true, fetch organizations from backend endpoints instead of mock admin API. */
+  useBackend?: boolean;
+}) {
   const { can } = useAuth();
   const url = useUrlState();
   const status = url.get('status') as VendorStatus | undefined;
@@ -59,7 +69,20 @@ export function VendorsTable() {
   const q = url.get('q');
   const filters = { ...(status ? { status } : {}), ...(type ? { type } : {}), ...(q ? { q } : {}) };
   const vendors = useVendorActions();
-  const list = useAdminVendors({ page: url.page, pageSize: 10, ...filters });
+  const backend = useBackendOrganizations({ page: url.page, limit: 10 });
+  const mock = useAdminVendors({ page: url.page, pageSize: 10, ...filters });
+  const list = useBackend
+    ? {
+        data: (backend.data as unknown as { data: Vendor[]; meta: { page: number; pageSize: number; total: number; totalPages: number } }) ?? {
+          data: [],
+          meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 },
+        },
+        isPending: backend.isPending,
+        isError: backend.isError,
+        error: backend.error as Error | null,
+        refetch: backend.refetch,
+      }
+    : mock;
   const [bulk, setBulk] = useState<{ vendors: Vendor[]; done: () => void }>();
   const write = can('admin.write');
 

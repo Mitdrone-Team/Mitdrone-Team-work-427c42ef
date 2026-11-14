@@ -5,5 +5,5 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Vendors' };
 
 export default function VendorsPage() {
-  return <VendorsTable />;
+  return <VendorsTable useBackend />;
 }

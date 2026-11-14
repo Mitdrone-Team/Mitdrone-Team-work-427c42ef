@@ -65,6 +65,7 @@ export default async function SearchPage({ searchParams }: Props) {
       <ProductListing
         searchParams={sp}
         title={`Search results for “${q}”`}
+        backend
         breadcrumb={
           extras.length ? (
             <div className="bg-muted/40 mb-6 space-y-3 rounded-xl border p-4">

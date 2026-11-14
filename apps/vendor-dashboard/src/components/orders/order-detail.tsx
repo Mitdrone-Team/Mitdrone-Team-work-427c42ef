@@ -1,7 +1,13 @@
 'use client';
 
 import { useAuth } from '@mitdrone/auth';
-import { getErrorMessage, useUpdateOrderStatus, useVendorOrder } from '@mitdrone/sdk';
+import {
+  getErrorMessage,
+  useBackendCancelOrder,
+  useBackendOrder,
+  useUpdateOrderStatus,
+  useVendorOrder,
+} from '@mitdrone/sdk';
 import {
   Button,
   Card,
@@ -36,17 +42,82 @@ import { useState } from 'react';
 
 import { CARRIERS, NEXT_ACTIONS } from './status-actions';
 
-import type { OrderStatus } from '@mitdrone/types';
+import type { Money, OrderStatus } from '@mitdrone/types';
 
-export function OrderDetail({ id }: { id: string }) {
+interface BackendOrderItem {
+  id: string;
+  productId: string;
+  variantId?: string;
+  vendorId: string;
+  title: string;
+  imageUrl?: string;
+  sku: string;
+  quantity: number;
+  unitPrice: Money;
+  total: Money;
+}
+
+interface BackendOrderTimelineEvent {
+  status: string;
+  at: string;
+  note?: string;
+}
+
+interface BackendAddress {
+  id: string;
+  fullName: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode?: string;
+  country: string;
+  isDefault: boolean;
+}
+
+interface BackendOrder {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  createdAt: string;
+  items: BackendOrderItem[];
+  customerName: string;
+  customerEmail: string;
+  shippingAddress: BackendAddress;
+  total: Money;
+  subtotal: Money;
+  shipping: Money;
+  tax: Money;
+  discount: Money;
+  commission: Money;
+  timeline: BackendOrderTimelineEvent[];
+  trackingNumber?: string;
+  carrier?: string;
+}
+
+export function OrderDetail({
+  id,
+  useBackend = false,
+}: {
+  id: string;
+  /** When true, fetch order from backend endpoints instead of mock seller API. */
+  useBackend?: boolean;
+}) {
   const { user } = useAuth();
   const v = user?.vendorId ?? '';
-  const { data: order, isPending, isError, error, refetch } = useVendorOrder(v, id);
+  const backendOrder = useBackendOrder(id);
+  const mockOrder = useVendorOrder(v, id);
+  const { data: orderRaw, isPending, isError, error, refetch } = useBackend
+    ? backendOrder
+    : mockOrder;
+  const order = orderRaw as unknown as BackendOrder;
+  const cancelOrder = useBackendCancelOrder(id);
   const update = useUpdateOrderStatus(v);
   const [ship, setShip] = useState(false);
   const [tracking, setTracking] = useState('');
   const [carrier, setCarrier] = useState(CARRIERS[0] ?? '');
-  const [cancel, setCancel] = useState(false);
+  const [openCancel, setOpenCancel] = useState(false);
 
   if (isPending)
     return (
@@ -103,7 +174,7 @@ export function OrderDetail({ id }: { id: string }) {
                   a.needsTracking
                     ? setShip(true)
                     : a.destructive
-                      ? setCancel(true)
+                      ? setOpenCancel(true)
                       : void move(a.status)
                 }
               >
@@ -270,14 +341,18 @@ export function OrderDetail({ id }: { id: string }) {
         </DialogContent>
       </Dialog>
       <ConfirmDialog
-        open={cancel}
-        onOpenChange={setCancel}
+        open={openCancel}
+        onOpenChange={setOpenCancel}
         destructive
         title={`Cancel order ${order.number}?`}
         description="The customer will be notified and the order cannot be restored."
         confirmLabel="Cancel order"
         onConfirm={async () => {
-          await move('cancelled');
+          if (useBackend) {
+            await cancelOrder.mutateAsync();
+          } else {
+            await move('cancelled');
+          }
         }}
       />
     </>

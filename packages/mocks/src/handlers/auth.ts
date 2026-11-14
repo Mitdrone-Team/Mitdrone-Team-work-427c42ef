@@ -13,18 +13,6 @@ import { getDb, nextId, passwordFor } from '../db';
 import { ApiError, readBody, requireUser, route } from '../http';
 import { issueTokens } from '../tokens';
 
-function sessionCookie(user: User): Response {
-  return Response.json(
-    { user, tokens: issueTokens(user) },
-    {
-      status: 200,
-      headers: {
-        'set-cookie': `mitdrone_session=${encodeURIComponent(user.id)}; Path=/; HttpOnly; SameSite=Lax`,
-      },
-    },
-  );
-}
-
 export const authHandlers = [
   route('get', routes.auth.registrationTerms, () => ({
     buyer: 'v1',
@@ -46,7 +34,15 @@ export const authHandlers = [
     if (user.status === 'suspended')
       throw new ApiError(403, 'account_suspended', 'This account is suspended');
     user.lastLoginAt = new Date().toISOString();
-    return sessionCookie(user);
+    return Response.json(
+      { user, tokens: issueTokens(user), csrfToken: 'mock-csrf-token' },
+      {
+        status: 200,
+        headers: {
+          'set-cookie': `mitdrone_session=${encodeURIComponent(user.id)}; Path=/; HttpOnly; SameSite=Lax`,
+        },
+      },
+    );
   }),
 
   route('post', routes.auth.register, async ({ request }) => {
@@ -109,5 +105,8 @@ export const authHandlers = [
     return undefined;
   }),
 
-  route('get', routes.auth.session, ({ request }) => requireUser(request)),
+  route('get', routes.auth.session, ({ request }) => {
+    const user = requireUser(request);
+    return Response.json({ user, csrfToken: 'mock-csrf-token' });
+  }),
 ];

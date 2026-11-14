@@ -4,6 +4,7 @@ import { isApiError, type ProductQuery } from '@mitdrone/sdk';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
+import { normalizeBackendProductList, extractBackendItems } from './normalization';
 import { REVALIDATE_SECONDS, serverApi } from './server-api';
 
 import type { ContentSection, PageParams, HealthLiveResponse, RegistrationTermsResponse } from '@mitdrone/types';
@@ -101,6 +102,46 @@ export const getBackendCatalogOffers = async (query: {
   return (await serverApi()).backend.catalog.offers(query);
 };
 
+export const getBackendCatalogProducts = async (query: {
+  page?: number;
+  limit?: number;
+} = {}) => {
+  const raw = await (await serverApi()).backend.catalog.products(query);
+  const products = normalizeBackendProductList(raw);
+  return {
+    data: products,
+    meta: { total: products.length, page: query.page ?? 1, totalPages: 1 },
+  };
+};
+
+export const getBackendOrders = async (query: {
+  page?: number;
+  limit?: number;
+} = {}) => {
+  const raw = await (await serverApi()).backend.orders.list(query);
+  const items = extractBackendItems(raw, ['orders', 'data']);
+  return {
+    data: items,
+    meta: { total: items.length, page: query.page ?? 1, totalPages: 1 },
+  };
+};
+
+export const getBackendOrder = async (orderId: string) => {
+  return (await serverApi()).backend.orders.detail(orderId);
+};
+
+export const getBackendReservations = async (query: {
+  page?: number;
+  limit?: number;
+} = {}) => {
+  const raw = await (await serverApi()).backend.reservations.list(query);
+  const items = extractBackendItems(raw, ['reservations', 'data']);
+  return {
+    data: items,
+    meta: { total: items.length, page: query.page ?? 1, totalPages: 1 },
+  };
+};
+
 export const getBackendOfferAvailability = async (
   offerId: string,
   query?: { startsAt?: string; endsAt?: string },
@@ -113,18 +154,4 @@ export const getBackendOrganizations = async (query: {
   limit?: number;
 } = {}) => {
   return (await serverApi()).backend.organizations.list(query);
-};
-
-export const getBackendReservations = async (query: {
-  page?: number;
-  limit?: number;
-} = {}) => {
-  return (await serverApi()).backend.reservations.list(query);
-};
-
-export const getBackendOrders = async (query: {
-  page?: number;
-  limit?: number;
-} = {}) => {
-  return (await serverApi()).backend.orders.list(query);
 };

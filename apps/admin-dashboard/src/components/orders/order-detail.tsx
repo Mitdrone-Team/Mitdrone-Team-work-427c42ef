@@ -1,13 +1,21 @@
 'use client';
 
 import { useAuth } from '@mitdrone/auth';
-import { getErrorMessage, useAdminOrder, useRefundOrder } from '@mitdrone/sdk';
+import type { Money } from '@mitdrone/types';
+import {
+  getErrorMessage,
+  useAdminOrder,
+  useBackendCancelOrder,
+  useBackendOrder,
+  useRefundOrder,
+} from '@mitdrone/sdk';
 import {
   Button,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  ConfirmDialog,
   ErrorState,
   PageHeader,
   ReasonDialog,
@@ -16,6 +24,7 @@ import {
   toast,
 } from '@mitdrone/ui';
 import { formatDateTime, formatMoney } from '@mitdrone/utils';
+
 import { Undo2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -23,11 +32,88 @@ import { useState } from 'react';
 
 const REFUNDABLE = ['paid', 'processing', 'shipped', 'delivered', 'completed'];
 
-export function OrderDetail({ id }: { id: string }) {
+interface BackendOrderItem {
+  id: string;
+  productId: string;
+  variantId?: string;
+  vendorId: string;
+  title: string;
+  imageUrl?: string;
+  sku: string;
+  quantity: number;
+  unitPrice: Money;
+  total: Money;
+}
+
+interface BackendOrderTimelineEvent {
+  status: string;
+  at: string;
+  note?: string;
+}
+
+interface BackendAddress {
+  line1: string;
+  city: string;
+  state: string;
+  country: string;
+  postalCode?: string;
+  phone?: string;
+}
+
+interface BackendOrder {
+  id: string;
+  number: string;
+  customerName: string;
+  customerEmail: string;
+  status: string;
+  createdAt: string;
+  items: BackendOrderItem[];
+  shippingAddress: BackendAddress;
+  subtotal: Money;
+  shipping: Money;
+  tax: Money;
+  discount: Money;
+  total: Money;
+  commission: Money;
+  paymentId?: string;
+  timeline: BackendOrderTimelineEvent[];
+}
+
+interface BackendPayment {
+  brand?: string;
+  last4?: string;
+  status?: string;
+  providerReference?: string;
+}
+
+interface BackendDispute {
+  id: string;
+  reason: string;
+  status: string;
+}
+
+interface BackendOrderResponse {
+  order: BackendOrder;
+  payment?: BackendPayment;
+  disputes: BackendDispute[];
+}
+
+export function OrderDetail({
+  id,
+  useBackend = false,
+}: {
+  id: string;
+  /** When true, fetch order from backend endpoints instead of mock admin API. */
+  useBackend?: boolean;
+}) {
   const { can } = useAuth();
-  const q = useAdminOrder(id);
+  const backendOrder = useBackendOrder(id);
+  const mockOrder = useAdminOrder(id);
+  const q = useBackend ? backendOrder : mockOrder;
   const refund = useRefundOrder();
+  const cancelOrder = useBackendCancelOrder(id);
   const [open, setOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   if (q.isPending)
     return (
@@ -44,7 +130,10 @@ export function OrderDetail({ id }: { id: string }) {
         onRetry={() => q.refetch()}
       />
     );
-  const { order, payment, disputes } = q.data;
+  const qData = q.data as unknown as BackendOrderResponse;
+  const order = qData.order;
+  const payment = qData.payment;
+  const disputes = qData.disputes ?? [];
   const canRefund =
     can('admin.write') && REFUNDABLE.includes(order.status) && Boolean(order.paymentId);
 
@@ -59,6 +148,16 @@ export function OrderDetail({ id }: { id: string }) {
             {canRefund ? (
               <Button variant="outline" className="text-destructive" onClick={() => setOpen(true)}>
                 <Undo2 /> Refund order
+              </Button>
+            ) : null}
+            {useBackend ? (
+              <Button
+                variant="outline"
+                className="text-destructive"
+                onClick={() => setCancelOpen(true)}
+                disabled={order.status === 'cancelled' || order.status === 'refunded'}
+              >
+                Cancel order
               </Button>
             ) : null}
           </>
@@ -169,7 +268,7 @@ export function OrderDetail({ id }: { id: string }) {
                     <span className="capitalize">
                       {payment.brand} •••• {payment.last4}
                     </span>
-                    <StatusBadge status={payment.status} />
+                    <StatusBadge status={payment.status ?? ''} />
                   </div>
                   <p className="text-muted-foreground font-mono text-xs">
                     {payment.providerReference}
@@ -218,6 +317,17 @@ export function OrderDetail({ id }: { id: string }) {
             .mutateAsync({ id: order.id, reason })
             .then(() => toast.success(`Order ${order.number} refunded`))
             .catch((e) => toast.error(getErrorMessage(e)));
+        }}
+      />
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={setCancelOpen}
+        destructive
+        title={`Cancel order ${order.number}?`}
+        description="The customer will be notified and the order cannot be restored."
+        confirmLabel="Cancel order"
+        onConfirm={async () => {
+          await cancelOrder.mutateAsync().then(() => toast.success(`Order ${order.number} cancelled`)).catch((e) => toast.error(getErrorMessage(e)));
         }}
       />
     </>

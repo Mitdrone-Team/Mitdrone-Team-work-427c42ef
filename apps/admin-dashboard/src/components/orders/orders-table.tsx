@@ -1,6 +1,6 @@
 'use client';
 
-import { api, getErrorMessage, useAdminOrders } from '@mitdrone/sdk';
+import { api, getErrorMessage, useAdminOrders, useBackendOrders } from '@mitdrone/sdk';
 import {
   DataTable,
   DataTableColumnHeader,
@@ -68,13 +68,31 @@ const columns: ColumnDef<Order>[] = [
   },
 ];
 
-export function OrdersTable() {
+export function OrdersTable({
+  useBackend = false,
+}: {
+  /** When true, fetch orders from backend endpoints instead of mock admin API. */
+  useBackend?: boolean;
+}) {
   const url = useUrlState();
   const router = useRouter();
   const status = url.get('status') as OrderStatus | undefined;
   const q = url.get('q');
   const filters = { ...(status ? { status } : {}), ...(q ? { q } : {}) };
-  const list = useAdminOrders({ page: url.page, pageSize: 10, ...filters });
+  const backend = useBackendOrders({ page: url.page, limit: 10 });
+  const mock = useAdminOrders({ page: url.page, pageSize: 10, ...filters });
+  const list = useBackend
+    ? {
+        data: (backend.data as unknown as { data: Order[]; meta: { page: number; pageSize: number; total: number; totalPages: number } }) ?? {
+          data: [],
+          meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 },
+        },
+        isPending: backend.isPending,
+        isError: backend.isError,
+        error: backend.error as Error | null,
+        refetch: backend.refetch,
+      }
+    : mock;
   if (list.isError)
     return <ErrorState description={getErrorMessage(list.error)} onRetry={() => list.refetch()} />;
   return (

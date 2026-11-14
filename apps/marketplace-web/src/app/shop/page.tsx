@@ -19,6 +19,7 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         title="Shop"
         description="Where to go when you already know what you want to buy."
         fixed={{ listingType: 'sale' }}
+        backend
       />
     </Suspense>
   );

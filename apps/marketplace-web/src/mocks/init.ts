@@ -13,7 +13,6 @@ if (typeof window !== 'undefined' && env.NEXT_PUBLIC_ENABLE_MOCKS === 'true') {
     .then(({ worker }) => worker.start({ onUnhandledRequest: 'bypass', quiet: true }))
     .then(() => undefined);
   configureApiClient({ fetch: (input, init) => ready.then(() => fetch(input, init)) });
-  configureApiClient({ getCsrfToken: () => 'mock-only-csrf-token' });
 }
 
 export const mocksReady = ready;

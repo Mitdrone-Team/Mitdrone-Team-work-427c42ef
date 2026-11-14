@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 
 import { ProductGrid } from '@/components/product/product-card';
-import { getCategories, getManufacturers, getProducts, getVendors } from '@/lib/data';
+import { getBackendCatalogProducts, getCategories, getManufacturers, getProducts, getVendors } from '@/lib/data';
 import { parseProductQuery, type SearchParams } from '@/lib/query';
 
 import { ActiveFilters, FiltersPanel, FiltersSheet, type Facets } from './filters-panel';
@@ -21,6 +21,8 @@ interface Props {
   /** Used when the URL carries no value for that key (e.g. /offers defaults to deals). */
   defaults?: Partial<ProductQuery>;
   breadcrumb?: ReactNode;
+  /** When true, fetch results from backend catalog endpoints instead of mock catalog. */
+  backend?: boolean;
 }
 
 export async function ProductListing({
@@ -30,10 +32,11 @@ export async function ProductListing({
   fixed = {},
   defaults = {},
   breadcrumb,
+  backend = false,
 }: Props) {
   const query: ProductQuery = { ...defaults, ...parseProductQuery(searchParams), ...fixed };
   const [result, categories, vendors, manufacturers] = await Promise.all([
-    getProducts(query),
+    backend ? getBackendCatalogProducts({ page: query.page, limit: query.pageSize }) : getProducts(query),
     getCategories(),
     getVendors({ pageSize: 50 }),
     getManufacturers({ pageSize: 50 }),

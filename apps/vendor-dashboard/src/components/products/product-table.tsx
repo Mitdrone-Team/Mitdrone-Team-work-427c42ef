@@ -3,6 +3,7 @@
 import { useAuth } from '@mitdrone/auth';
 import {
   getErrorMessage,
+  useBackendVendorOffers,
   useBulkProducts,
   useDeleteProduct,
   useVendorProducts,
@@ -63,9 +64,18 @@ type Confirm = {
   done?: () => void;
 };
 
-export function ProductTable() {
+export function ProductTable({
+  backendData,
+  vendorId: propVendorId,
+  useBackend = false,
+}: {
+  backendData?: Product[];
+  vendorId?: string;
+  /** When true, fetch offers from backend endpoints instead of mock seller API. */
+  useBackend?: boolean;
+}) {
   const { user } = useAuth();
-  const v = user?.vendorId;
+  const v = propVendorId ?? user?.vendorId;
   const url = useUrlState();
   const [search, setSearch] = useState(url.get('q') ?? '');
   const debounced = useDebouncedValue(search, 350);
@@ -75,12 +85,25 @@ export function ProductTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the debounced text
   }, [debounced]);
 
-  const products = useVendorProducts(v, {
+  const backend = useBackendVendorOffers(v ?? '', { page: url.page, limit: 10 });
+  const mock = useVendorProducts(v, {
     page: url.page,
     pageSize: 10,
     ...(status ? { status: status as ProductStatus } : {}),
     ...(url.get('q') ? { q: url.get('q') as string } : {}),
   });
+  const products = backendData
+    ? { data: backendData, meta: { page: url.page, pageSize: 10, total: backendData.length, totalPages: 1 }, isPending: false, isError: false, error: null, refetch: () => {} }
+    : useBackend && v
+    ? {
+        data: (backend.data as unknown as Product[]) ?? [],
+        meta: { page: url.page, pageSize: 10, total: (backend.data as unknown as Product[]).length, totalPages: 1 },
+        isPending: backend.isPending,
+        isError: backend.isError,
+        error: backend.error as Error | null,
+        refetch: backend.refetch,
+      }
+    : mock;
   const bulk = useBulkProducts(v ?? '');
   const del = useDeleteProduct(v ?? '');
   const [confirm, setConfirm] = useState<Confirm>();
@@ -228,11 +251,34 @@ export function ProductTable() {
     [],
   );
 
-  if (products.isError)
+  let productList: Product[];
+  let productMeta: { page: number; pageSize: number; total: number; totalPages: number };
+  let productPending: boolean;
+  let productError: boolean;
+
+  if (Array.isArray(products)) {
+    productList = products;
+    productMeta = { page: url.page, pageSize: 10, total: products.length, totalPages: 1 };
+    productPending = false;
+    productError = false;
+  } else {
+    const data = products.data;
+    if (Array.isArray(data)) {
+      productList = data;
+      productMeta = { page: url.page, pageSize: 10, total: data.length, totalPages: 1 };
+    } else {
+      productList = data?.data ?? [];
+      productMeta = data?.meta ?? { page: 1, pageSize: 10, total: 0, totalPages: 1 };
+    }
+    productPending = products.isPending;
+    productError = products.isError;
+  }
+
+  if (productError)
     return (
       <ErrorState
-        description={getErrorMessage(products.error)}
-        onRetry={() => products.refetch()}
+        description={getErrorMessage((products as { error: Error }).error)}
+        onRetry={() => (products as { refetch: () => void }).refetch()}
       />
     );
 
@@ -251,8 +297,8 @@ export function ProductTable() {
       />
       <DataTable
         columns={columns}
-        data={products.data?.data ?? []}
-        isLoading={products.isPending}
+        data={productList}
+        isLoading={productPending}
         searchable={false}
         enableSelection
         getRowId={(p) => p.id}
@@ -263,9 +309,9 @@ export function ProductTable() {
             : 'Add your first product to start selling.'
         }
         serverPagination={{
-          page: products.data?.meta.page ?? url.page,
+          page: productMeta.page,
           pageSize: 10,
-          total: products.data?.meta.total ?? 0,
+          total: productMeta.total,
           onPageChange: (page) => url.set({ page }),
         }}
         toolbar={

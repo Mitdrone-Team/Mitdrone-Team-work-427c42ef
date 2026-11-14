@@ -28,7 +28,13 @@ import type { Product } from '@mitdrone/types';
 import type { DateRange } from 'react-day-picker';
 
 /** Rental booking mock: sends a request to the seller through the business quote endpoint. */
-export function RentalRequest({ product }: { product: Product }) {
+export function RentalRequest({
+  product,
+  availability: _availability,
+}: {
+  product: Product;
+  availability?: unknown;
+}) {
   const { user } = useAuth();
   const rental = product.rental;
   const [open, setOpen] = useState(false);

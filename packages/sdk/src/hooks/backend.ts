@@ -64,6 +64,36 @@ export const useBackendOrgApplication = () =>
       api.backend.organizations.apply(body),
   });
 
+export const useBackendOrgApplyAsServiceProvider = () =>
+  useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.organizations.applyAsServiceProvider>[0]) =>
+      api.backend.organizations.applyAsServiceProvider(body),
+  });
+
+export const useBackendOrgResubmitApplication = (id: string) =>
+  useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.organizations.resubmitApplication>[1]) =>
+      api.backend.organizations.resubmitApplication(id, body),
+  });
+
+export const useBackendOrgResubmitServiceProviderApplication = (id: string) =>
+  useMutation({
+    mutationFn: (
+      body: Parameters<typeof api.backend.organizations.resubmitServiceProviderApplication>[1],
+    ) => api.backend.organizations.resubmitServiceProviderApplication(id, body),
+  });
+
+export const useBackendOrgAddMember = (id: string) =>
+  useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.organizations.addMember>[1]) =>
+      api.backend.organizations.addMember(id, body),
+  });
+
+export const useBackendOrgRemoveMember = (id: string) =>
+  useMutation({
+    mutationFn: (userId: string) => api.backend.organizations.removeMember(id, userId),
+  });
+
 /* ---------------------------------------------------------- org review */
 export const useBackendOrgReviewQueue = (
   query: { page?: number; limit?: number; status?: string; kind?: string } = {},
@@ -111,6 +141,7 @@ export const useBackendVendorOffers = (
     queryKey: keys.backendVendorOffers(organizationId, query),
     queryFn: () => api.backend.vendorOffers.list(organizationId, query),
     placeholderData: keepPreviousData,
+    enabled: Boolean(organizationId),
   });
 
 export const useBackendCreateOffer = (organizationId: string) => {
@@ -137,6 +168,30 @@ export const useBackendUpdateOffer = (organizationId: string, id: string) => {
   });
 };
 
+export const useBackendSubmitOffer = (organizationId: string, id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.vendorOffers.submit>[2]) =>
+      api.backend.vendorOffers.submit(organizationId, id, body),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendVendorOffers(organizationId),
+      }),
+  });
+};
+
+export const useBackendArchiveOffer = (organizationId: string, id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.vendorOffers.archive>[2]) =>
+      api.backend.vendorOffers.archive(organizationId, id, body),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendVendorOffers(organizationId),
+      }),
+  });
+};
+
 /* ------------------------------------------------------------------- inventory */
 export const useBackendInventory = (
   organizationId: string,
@@ -146,6 +201,7 @@ export const useBackendInventory = (
     queryKey: keys.backendInventory(organizationId, query),
     queryFn: () => api.backend.inventory.listAssets(organizationId, query),
     placeholderData: keepPreviousData,
+    enabled: Boolean(organizationId),
   });
 
 export const useBackendStock = (
@@ -204,6 +260,64 @@ export const useBackendConfigureRentalTerms = (
       }),
   });
 };
+
+export const useBackendCreateAsset = (organizationId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.inventory.createAsset>[1]) =>
+      api.backend.inventory.createAsset(organizationId, body),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendInventory(organizationId),
+      }),
+  });
+};
+
+export const useBackendUpdateAsset = (organizationId: string, id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.inventory.updateAsset>[2]) =>
+      api.backend.inventory.updateAsset(organizationId, id, body),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendInventory(organizationId),
+      }),
+  });
+};
+
+export const useBackendBlockAsset = (organizationId: string, id: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.inventory.blockAsset>[2]) =>
+      api.backend.inventory.blockAsset(organizationId, id, body),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendInventory(organizationId),
+      }),
+  });
+};
+
+export const useBackendReleaseBlock = (organizationId: string, id: string, blockId: string) => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.backend.inventory.releaseBlock(organizationId, id, blockId),
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: keys.backendInventory(organizationId),
+      }),
+  });
+};
+
+export const useBackendAssetCalendar = (
+  organizationId: string,
+  id: string,
+  query: { startsAt: string; endsAt: string },
+) =>
+  useQuery({
+    queryKey: keys.backendInventory(organizationId, 'calendar', id),
+    queryFn: () => api.backend.inventory.getAssetCalendar(organizationId, id, query),
+    enabled: Boolean(organizationId && id),
+  });
 
 /* --------------------------------------------------------------- reservations */
 export const useBackendReservations = (
@@ -313,6 +427,15 @@ export const useBackendHealthReady = () =>
   });
 
 /* ------------------------------------------------------------ staff catalog */
+export const useBackendCreateProduct = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.backend.staffCatalog.createProduct>[0]) =>
+      api.backend.staffCatalog.createProduct(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.backendStaffCatalog() }),
+  });
+};
+
 export const useBackendOfferQueue = (
   query: { page?: number; limit?: number; status?: string } = {},
 ) =>

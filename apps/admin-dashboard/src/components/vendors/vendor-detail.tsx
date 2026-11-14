@@ -1,7 +1,13 @@
 'use client';
 
 import { useAuth } from '@mitdrone/auth';
-import { getErrorMessage, useAdminVendor } from '@mitdrone/sdk';
+import {
+  getErrorMessage,
+  useAdminVendor,
+  useBackendOrganization,
+  useBackendOrgReviewDecision,
+  useBackendOrgSuspend,
+} from '@mitdrone/sdk';
 import {
   Badge,
   Button,
@@ -31,7 +37,7 @@ import Link from 'next/link';
 
 import { ACTION_LABELS, availableActions, useVendorActions } from './vendor-actions';
 
-import type { AdminVendorDetail } from '@mitdrone/types';
+import type { AdminVendorDetail, Money, VendorStatus } from '@mitdrone/types';
 
 const DOC_LABELS: Record<string, string> = {
   cac_certificate: 'CAC certificate',
@@ -40,6 +46,98 @@ const DOC_LABELS: Record<string, string> = {
   ncaa_permit: 'NCAA permit',
   tax_id: 'Tax ID',
 };
+
+interface BackendVendorStats {
+  revenue: Money;
+  orders: number;
+  products: number;
+  conversionRate: number;
+  pendingPayout: Money;
+}
+
+interface BackendOwner {
+  id: string;
+  name: string;
+  email: string;
+  status: string;
+  lastLoginAt?: string;
+}
+
+interface BackendProduct {
+  id: string;
+  title: string;
+  status: string;
+  price: Money;
+  inventory: { quantity: number };
+}
+
+interface BackendOrderSummary {
+  id: string;
+  number: string;
+  customerName: string;
+  status: string;
+  total: Money;
+}
+
+interface BackendPayout {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  amount: Money;
+}
+
+interface BackendVendor {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  status: string;
+  description: string;
+  email: string;
+  phone?: string;
+  website?: string;
+  city: string;
+  state: string;
+  country: string;
+  verified: boolean;
+  rating: number;
+  reviewCount: number;
+  commissionRate: number;
+  shipping: { handlingDays: number };
+  returnPolicy: string;
+  kycStatus: string;
+  createdAt: string;
+}
+
+interface BackendVendorDetail {
+  vendor: BackendVendor;
+  stats: BackendVendorStats;
+  kyc: BackendKyc | null;
+  owner: BackendOwner | null;
+  products: BackendProduct[];
+  recentOrders: BackendOrderSummary[];
+  payouts: BackendPayout[];
+}
+
+interface BackendKyc {
+  id: string;
+  vendorId: string;
+  status: string;
+  legalName: string;
+  registrationNumber?: string;
+  documents: BackendKycDocument[];
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
+}
+
+interface BackendKycDocument {
+  type: string;
+  fileName: string;
+  url: string;
+  uploadedAt: string;
+}
 
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -61,7 +159,7 @@ function KycPanel({ detail }: { detail: AdminVendorDetail }) {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Business verification</CardTitle>
-          <StatusBadge status={kyc.status} />
+          <StatusBadge status={kyc.status as VendorStatus} />
         </CardHeader>
         <CardContent>
           <dl className="divide-y">
@@ -109,9 +207,20 @@ function KycPanel({ detail }: { detail: AdminVendorDetail }) {
   );
 }
 
-export function VendorDetail({ id }: { id: string }) {
+export function VendorDetail({
+  id,
+  useBackend = false,
+}: {
+  id: string;
+  /** When true, fetch from backend organization endpoints instead of mock admin API. */
+  useBackend?: boolean;
+}) {
   const { can } = useAuth();
-  const q = useAdminVendor(id);
+  const backendVendor = useBackendOrganization(id);
+  const mockVendor = useAdminVendor(id);
+  const q = useBackend ? backendVendor : mockVendor;
+  const review = useBackendOrgReviewDecision();
+  const suspend = useBackendOrgSuspend();
   const actions = useVendorActions();
   if (q.isPending)
     return (
@@ -128,9 +237,9 @@ export function VendorDetail({ id }: { id: string }) {
         onRetry={() => q.refetch()}
       />
     );
-  const d = q.data;
+  const d = q.data as unknown as BackendVendorDetail;
   const v = d.vendor;
-  const allowed = can('admin.write') ? availableActions(v) : [];
+  const allowed = can('admin.write') ? availableActions(v as unknown as { status: VendorStatus }) : [];
 
   return (
     <>
@@ -145,13 +254,25 @@ export function VendorDetail({ id }: { id: string }) {
                 Verified
               </Badge>
             ) : null}
-            <StatusBadge status={v.status} />
+            <StatusBadge status={v.status as VendorStatus} />
             {allowed.map((a) => (
               <Button
                 key={a}
                 variant={a === 'approve' ? 'default' : 'outline'}
                 className={a === 'approve' ? undefined : 'text-destructive'}
-                onClick={() => actions.request(a, v)}
+                onClick={async () => {
+                  if (useBackend) {
+                    if (a === 'approve') {
+                      await review.mutateAsync({ id, body: { expectedVersion: 1, reason: '', decision: 'APPROVE' } });
+                    } else if (a === 'reject') {
+                      await review.mutateAsync({ id, body: { expectedVersion: 1, reason: 'Rejected by admin', decision: 'REJECT' } });
+                    } else if (a === 'suspend') {
+                      await suspend.mutateAsync({ id, body: { expectedVersion: 1, reason: 'Suspended by admin' } });
+                    }
+                  } else {
+                    actions.request(a, v);
+                  }
+                }}
               >
                 {ACTION_LABELS[a]}
               </Button>
@@ -206,7 +327,7 @@ export function VendorDetail({ id }: { id: string }) {
                   <Fact label="Name">{d.owner.name}</Fact>
                   <Fact label="Email">{d.owner.email}</Fact>
                   <Fact label="Account">
-                    <StatusBadge status={d.owner.status} />
+                    <StatusBadge status={d.owner.status as VendorStatus} />
                   </Fact>
                   <Fact label="Last sign-in">
                     {d.owner.lastLoginAt ? formatDateTime(d.owner.lastLoginAt) : ''}
@@ -224,7 +345,7 @@ export function VendorDetail({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="kyc">
-          <KycPanel detail={d} />
+          <KycPanel detail={d as unknown as AdminVendorDetail} />
         </TabsContent>
 
         <TabsContent value="products">
@@ -247,7 +368,7 @@ export function VendorDetail({ id }: { id: string }) {
                       <TableRow key={p.id}>
                         <TableCell className="font-medium">{p.title}</TableCell>
                         <TableCell>
-                          <StatusBadge status={p.status} />
+                          <StatusBadge status={p.status as VendorStatus} />
                         </TableCell>
                         <TableCell className="text-right">{formatMoney(p.price)}</TableCell>
                         <TableCell className="text-right">{p.inventory.quantity}</TableCell>
@@ -290,7 +411,7 @@ export function VendorDetail({ id }: { id: string }) {
                         </TableCell>
                         <TableCell>{o.customerName}</TableCell>
                         <TableCell>
-                          <StatusBadge status={o.status} />
+                          <StatusBadge status={o.status as VendorStatus} />
                         </TableCell>
                         <TableCell className="text-right">{formatMoney(o.total)}</TableCell>
                       </TableRow>

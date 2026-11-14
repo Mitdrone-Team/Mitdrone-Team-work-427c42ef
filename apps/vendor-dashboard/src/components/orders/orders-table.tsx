@@ -1,7 +1,12 @@
 'use client';
 
 import { useAuth } from '@mitdrone/auth';
-import { getErrorMessage, useBulkOrders, useVendorOrders } from '@mitdrone/sdk';
+import {
+  getErrorMessage,
+  useBackendOrders,
+  useBulkOrders,
+  useVendorOrders,
+} from '@mitdrone/sdk';
 import {
   Button,
   ConfirmDialog,
@@ -33,7 +38,12 @@ import { useUrlState } from '@/lib/url';
 import type { Order, OrderStatus } from '@mitdrone/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
-export function OrdersTable() {
+export function OrdersTable({
+  useBackend = false,
+}: {
+  /** When true, fetch orders from backend endpoints instead of mock seller API. */
+  useBackend?: boolean;
+}) {
   const { user } = useAuth();
   const v = user?.vendorId;
   const url = useUrlState();
@@ -45,12 +55,22 @@ export function OrdersTable() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the debounced text
   }, [debounced]);
 
-  const orders = useVendorOrders(v, {
+  const backend = useBackendOrders({ page: url.page, limit: 10 });
+  const mock = useVendorOrders(v, {
     page: url.page,
     pageSize: 10,
     ...(status ? { status: status as OrderStatus } : {}),
     ...(url.get('q') ? { q: url.get('q') as string } : {}),
   });
+  const orders = useBackend && v
+    ? {
+        data: (backend.data as unknown as { data: Order[]; meta: { page: number; pageSize: number; total: number; totalPages: number } }) ?? { data: [], meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 } },
+        isPending: backend.isPending,
+        isError: backend.isError,
+        error: backend.error as Error | null,
+        refetch: backend.refetch,
+      }
+    : mock;
   const bulk = useBulkOrders(v ?? '');
   const [cancelIds, setCancelIds] = useState<{ ids: string[]; done: () => void }>();
 
