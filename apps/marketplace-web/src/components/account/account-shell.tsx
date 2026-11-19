@@ -10,6 +10,7 @@ import type { ReactNode } from 'react';
 const NAV = [
   { href: '/account', label: 'Profile' },
   { href: '/account/orders', label: 'Orders' },
+  { href: '/account/reservations', label: 'Reservations' },
   { href: '/account/addresses', label: 'Addresses' },
   { href: '/account/referrals', label: 'Referrals' },
   { href: '/account/projects', label: 'My projects' },

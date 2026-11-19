@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChangePasswordForm, useAuth } from '@mitdrone/auth';
-import { useUpdateProfile } from '@mitdrone/sdk';
+import { api, getErrorMessage, useUpdateProfile } from '@mitdrone/sdk';
 import { Button, Form, Input, Label, toast } from '@mitdrone/ui';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -16,7 +16,7 @@ const schema = z.object({
 });
 
 export function ProfileForm() {
-  const { user, reloadUser } = useAuth();
+  const { user, reloadUser, logout } = useAuth();
   const update = useUpdateProfile();
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
@@ -66,6 +66,29 @@ export function ProfileForm() {
         </form>
       </Form>
       <ChangePasswordForm />
+      <section className="bg-card space-y-3 rounded-xl border p-5">
+        <div>
+          <h2 className="font-semibold">Sessions</h2>
+          <p className="text-muted-foreground text-sm">
+            Sign out of every device where you are currently signed in, including this one.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              await api.auth.logoutAll();
+            } catch (e) {
+              toast.error(getErrorMessage(e));
+              return;
+            }
+            await logout();
+            toast.success('Signed out of all devices');
+          }}
+        >
+          Sign out of all devices
+        </Button>
+      </section>
     </div>
   );
 }

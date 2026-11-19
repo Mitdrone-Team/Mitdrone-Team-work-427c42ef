@@ -1,14 +1,36 @@
 'use client';
 
-import { getErrorMessage, useMyOrder } from '@mitdrone/sdk';
+import { getErrorMessage, useBackendOrder, useMyOrder } from '@mitdrone/sdk';
 import { Button, ErrorState, Skeleton, StatusBadge } from '@mitdrone/ui';
 import { formatDateTime, formatMoney } from '@mitdrone/utils';
 import { CheckCircle2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-export function OrderDetail({ id, placed }: { id: string; placed: boolean }) {
-  const { data: order, isPending, isError, error, refetch } = useMyOrder(id);
+import type { Order } from '@mitdrone/types';
+
+function unwrapOrder(raw: unknown): Order | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const record = raw as Record<string, unknown>;
+  return (('order' in record ? record.order : record) as Order) ?? undefined;
+}
+
+export function OrderDetail({
+  id,
+  placed,
+  useBackend = false,
+}: {
+  id: string;
+  placed: boolean;
+  /** When true, fetch the order from backend endpoints instead of the mock API. */
+  useBackend?: boolean;
+}) {
+  const backendOrder = useBackendOrder(id);
+  const mockOrder = useMyOrder(id);
+  const { data: raw, isPending, isError, error, refetch } = useBackend
+    ? backendOrder
+    : mockOrder;
+  const order = unwrapOrder(raw);
   if (isPending)
     return (
       <div className="space-y-4">
@@ -21,6 +43,15 @@ export function OrderDetail({ id, placed }: { id: string; placed: boolean }) {
       <ErrorState
         title="We could not load this order"
         description={getErrorMessage(error)}
+        onRetry={() => refetch()}
+      />
+    );
+
+  if (!order)
+    return (
+      <ErrorState
+        title="We could not load this order"
+        description="The order could not be found."
         onRetry={() => refetch()}
       />
     );

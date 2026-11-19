@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Suspense, type ReactNode } from 'react';
 
 import { ProductGrid } from '@/components/product/product-card';
-import { getBackendCatalogProducts, getCategories, getManufacturers, getProducts, getVendors } from '@/lib/data';
+import { getBackendCatalogOffers, getBackendCatalogProducts, getCategories, getManufacturers, getProducts, getVendors } from '@/lib/data';
 import { parseProductQuery, type SearchParams } from '@/lib/query';
 
 import { ActiveFilters, FiltersPanel, FiltersSheet, type Facets } from './filters-panel';
@@ -23,6 +23,8 @@ interface Props {
   breadcrumb?: ReactNode;
   /** When true, fetch results from backend catalog endpoints instead of mock catalog. */
   backend?: boolean;
+  /** When set, fetch backend catalog offers (SALE or RENTAL) instead of products. */
+  offers?: 'SALE' | 'RENTAL';
 }
 
 export async function ProductListing({
@@ -33,10 +35,16 @@ export async function ProductListing({
   defaults = {},
   breadcrumb,
   backend = false,
+  offers,
 }: Props) {
   const query: ProductQuery = { ...defaults, ...parseProductQuery(searchParams), ...fixed };
+  const results = offers
+    ? getBackendCatalogOffers({ mode: offers, page: query.page, limit: query.pageSize })
+    : backend
+      ? getBackendCatalogProducts({ page: query.page, limit: query.pageSize })
+      : getProducts(query);
   const [result, categories, vendors, manufacturers] = await Promise.all([
-    backend ? getBackendCatalogProducts({ page: query.page, limit: query.pageSize }) : getProducts(query),
+    results,
     getCategories(),
     getVendors({ pageSize: 50 }),
     getManufacturers({ pageSize: 50 }),

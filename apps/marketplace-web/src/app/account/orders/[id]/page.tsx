@@ -12,5 +12,5 @@ export default async function OrderPage({
   searchParams: Promise<{ placed?: string }>;
 }) {
   const [{ id }, { placed }] = await Promise.all([params, searchParams]);
-  return <OrderDetail id={id} placed={placed === '1'} />;
+  return <OrderDetail id={id} placed={placed === '1'} useBackend />;
 }

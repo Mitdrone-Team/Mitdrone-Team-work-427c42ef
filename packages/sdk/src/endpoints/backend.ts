@@ -401,7 +401,7 @@ export const backendEndpoints = (c: ApiClient) => ({
     detail: (id: string) =>
       c.request<unknown>('GET', backendRoutes.reservations.detail(id)),
     release: (id: string) =>
-      c.request<unknown>('POST', backendRoutes.reservations.release(id)),
+      c.request<unknown>('POST', backendRoutes.reservations.release(id), { csrf: true }),
     checkoutQuote: (id: string) =>
       c.request<unknown>('GET', backendRoutes.reservations.checkoutQuote(id)),
   },
@@ -423,7 +423,7 @@ export const backendEndpoints = (c: ApiClient) => ({
       ),
     detail: (id: string) => c.request<unknown>('GET', backendRoutes.orders.detail(id)),
     cancel: (id: string) =>
-      c.request<unknown>('POST', backendRoutes.orders.cancel(id)),
+      c.request<unknown>('POST', backendRoutes.orders.cancel(id), { csrf: true }),
   },
 
   /* ------------------------------------------------------------------- health */

@@ -1,10 +1,11 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import type { ReactNode } from 'react';
 
 import { SiteFooter } from '@/components/layout/site-footer';
 import { SiteHeader } from '@/components/layout/site-header';
+
+import type { ReactNode } from 'react';
 
 export function MarketplaceChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();

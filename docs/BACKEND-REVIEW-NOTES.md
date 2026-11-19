@@ -1,10 +1,10 @@
-# MITDrone — Backend Developer Review Notes
+﻿# MITDrone â€” Backend Developer Review Notes
 
 ## 1. Implementation Summary
 
 This work integrates the MITDrone frontend (marketplace-web, vendor-dashboard, admin-dashboard) with the live backend OpenAPI specification at `https://mitdrone.vercel.app/docs/openapi.json` (57 operations, all response bodies undocumented `{}`).
 
-All 57 backend operations now have SDK endpoint implementations in `packages/sdk/src/endpoints/backend.ts`. Most have TanStack Query hooks in `packages/sdk/src/hooks/backend.ts`. 17 operations are connected to actual application pages.
+All 57 backend operations now have SDK endpoint implementations in `packages/sdk/src/endpoints/backend.ts` and TanStack Query hooks in `packages/sdk/src/hooks/backend.ts`. 55 of 57 operations are connected to application pages. The remaining 2 (vendor offer create/update: VO2/VO3) are blocked by a backend contract gap and are documented below.
 
 **Scope:** Backend API integration only. No changes to mock data, UI design, or unrelated functionality.
 
@@ -15,7 +15,7 @@ All 57 backend operations now have SDK endpoint implementations in `packages/sdk
 ### Token Capture
 - `POST /auth/login` response is parsed for `csrfToken` (top-level or `session.csrfToken`).
 - On success, `configureApiClient({ getCsrfToken: () => this.csrfToken })` is called.
-- Token is stored in-memory on the `AuthController` instance only — never in localStorage or sessionStorage.
+- Token is stored in-memory on the `AuthController` instance only â€” never in localStorage or sessionStorage.
 
 ### Session Restoration
 - `AuthProvider` calls `ctrl.restore()` on mount, which invokes `GET /auth/session`.
@@ -42,36 +42,33 @@ All 57 backend operations now have SDK endpoint implementations in `packages/sdk
 ### Cookie / CORS Dependencies (unverified)
 - All three frontend origins must be allowed for credentialed CORS.
 - Session cookie: `mitdrone_session`, HttpOnly, SameSite=Lax (per mock handler), Secure (production).
-- CSRF token rotation: not documented in spec — unknown if backend rotates tokens on login/session.
+- CSRF token rotation: not documented in spec â€” unknown if backend rotates tokens on login/session.
 - Session expiration: not documented in spec.
 
 ---
 
 ## 3. Exact Endpoints Integrated
 
-All 57 operations have SDK endpoint implementations. 17 are connected to app pages:
+All 57 operations have SDK endpoint implementations. 55 are connected to app pages (see `docs/API-INTEGRATION-TRACKER.md` for the per-operation table).
 
-| Endpoint | Method | App | Page |
-|----------|--------|-----|------|
-| `/catalog/products` | GET | Marketplace | Shop (`/shop`) |
-| `/catalog/offers/{offerId}/availability` | GET | Marketplace | Product detail (`/products/[slug]`) |
-| `/orders` | GET | Marketplace | Account orders (`/account/orders`) |
-| `/organizations/{orgId}/offers` | GET | Vendor dashboard | Products (`/(dashboard)/products`) |
-| `/organizations/{orgId}/assets` | GET | Vendor dashboard | Inventory (`/(dashboard)/inventory`) |
-| `/orders` | GET | Vendor dashboard | Orders (`/(dashboard)/orders`) |
-| `/orders/{id}` | GET | Vendor dashboard | Order detail (`/(dashboard)/orders/[id]`) |
-| `/orders/{id}/cancel` | POST | Vendor dashboard | Order detail cancel |
-| `/organizations` | GET | Admin dashboard | Vendors (`/(console)/vendors`) |
-| `/organizations/{id}` | GET | Admin dashboard | Vendor detail (`/(console)/vendors/[id]`) |
-| `/admin/organizations/{id}/review` | POST | Admin dashboard | Vendor detail approve/reject |
-| `/admin/organizations/{id}/suspend` | POST | Admin dashboard | Vendor detail suspend |
-| `/orders` | GET | Admin dashboard | Orders (`/(console)/orders`) |
-| `/orders/{id}` | GET | Admin dashboard | Order detail (`/(console)/orders/[id]`) |
-| `/orders/{id}/cancel` | POST | Admin dashboard | Order detail cancel |
-| `/admin/offers` | GET | Admin dashboard | Products moderation (`/(console)/products`) |
-| `/admin/offers/{id}/review` | POST | Admin dashboard | Products moderation approve |
+| Area | App | Workflows wired |
+|------|-----|-----------------|
+| Auth A1â€“A11 | Marketplace | Register (with terms), verify/resend, forgot/reset password, login, session restore, logout, logout-all, change password |
+| Health H1/H2 | Admin dashboard | Overview backend live/ready badge |
+| Organizations O1â€“O8 | Admin + Vendor + Marketplace | Org list/detail (admin), vendor/service applications + resubmit (marketplace `/sell/apply`, `/services/apply`), team member add/remove (vendor settings) |
+| Org review S1â€“S3 | Admin dashboard | Vendors table queue, detail approve/reject/suspend |
+| Catalog C1â€“C3 | Marketplace | Shop/search products, `/rent` + `/offers` listings, product availability |
+| Vendor offers VO1, VO4, VO5 | Vendor dashboard | Products table fetch, submit, archive |
+| Inventory I1â€“I11 | Vendor dashboard | Products stock init/adjust + rental terms; inventory assets create/update/block/release/calendar |
+| Reservations R1â€“R5 | Marketplace | `/account/reservations` list/create/detail/release/checkout quote |
+| Orders OR1â€“OR4 | Marketplace + Vendor + Admin | Order list/detail/cancel; place order from reservation |
+| Staff catalog S4â€“S6, Ch1â€“Ch2 | Admin dashboard | Create product, offer queue review approve/reject, checkout terms get/put |
 
-Remaining 38 operations have SDK endpoints + hooks but no app page integration.
+Remaining 2 operations (SDK endpoints + hooks exist, no app page by design):
+- `POST /organizations/{orgId}/offers` (VO2)
+- `PATCH /organizations/{orgId}/offers/{id}` (VO3)
+
+Both are blocked because `CreateOfferDto`/`UpdateOfferDto` require a `productId` and no vendor-facing product-create endpoint exists.
 
 ---
 
@@ -84,13 +81,13 @@ Remaining 38 operations have SDK endpoints + hooks but no app page integration.
 - `Idempotency-Key` header auto-generated for `POST /reservations` and `POST /orders`.
 - `baseUrlOverride` strips `/api/v1` for health endpoints (`/health/*`).
 
-### Response assumptions (UNVERIFIED — speculative)
+### Response assumptions (UNVERIFIED â€” speculative)
 All backend response bodies are `{}` in the OpenAPI spec. The following code assumes specific response shapes:
 
 1. **`normalizeBackendProductList()`** (marketplace) assumes `{ data: Product[] }` or `{ products: [...] }` at top level.
 2. **`normalizeBackendProduct()`** assumes individual product objects have `id`, `slug`, `title`, `price`, `inventory.quantity`, `images[]`, etc.
 3. **Vendor dashboard tables** cast backend responses to `{ data: X[]; meta: { page, pageSize, total, totalPages } }` or `{ offers: [...] }`, `{ assets: [...] }`, `{ orders: [...] }`, `{ reservations: [...] }`.
-4. **`totalPages: 1`** is hardcoded in `getBackendCatalogProducts()` — assumes single-page results.
+4. **`totalPages: 1`** is hardcoded in `getBackendCatalogProducts()` â€” assumes single-page results.
 5. **DTO field mappings**: Backend `CreateOfferDto` expects `{ productId, mode, amountMinor, currency, rateUnit }` which does NOT match product form fields (`title`, `description`, `priceMajor`, etc.). Product create/edit pages continue using mock seller SDK hooks.
 
 If the backend returns a different shape, these will silently return empty data or throw runtime errors.
@@ -129,7 +126,7 @@ The following were NOT verified against the live backend:
 | All response bodies `{}` | 57 operations have undocumented response bodies. No frontend types can be derived from the spec. |
 | Missing response schemas | Login, session, catalog products, organization assets, orders, reservations, and all other responses lack schemas. |
 | Idempotency-Key header duplication | Spec lists both `idempotency-key` (lowercase) and `Idempotency-Key` (canonical) on `/reservations` and `/orders`. SDK sends canonical `Idempotency-Key`. |
-| DTO field mismatch | Backend `CreateOfferDto` expects `{ productId, mode, amountMinor, currency, rateUnit }` — completely different from product form fields. Product create/edit cannot use backend offer creation without a different UI flow. |
+| DTO field mismatch | Backend `CreateOfferDto` expects `{ productId, mode, amountMinor, currency, rateUnit }` â€” completely different from product form fields. Product create/edit cannot use backend offer creation without a different UI flow. |
 
 ---
 
@@ -151,48 +148,49 @@ The following backend configurations are required for the frontend to work:
 
 All response bodies are `{}` in the spec. The following are completely undocumented:
 
-- `GET /auth/session` — user object shape
-- `GET /auth/registration-terms` — response shape
-- `GET /catalog/products` — product list shape
-- `GET /catalog/offers` — offer list shape
-- `GET /organizations` — organization list shape
-- `GET /organizations/{orgId}/offers` — offer list shape
-- `GET /organizations/{orgId}/assets` — asset list shape
-- `GET /orders` — order list shape
-- `GET /orders/{id}` — order detail shape
-- `GET /reservations` — reservation list shape
-- `GET /health/live`, `GET /health/ready` — health response shapes
+- `GET /auth/session` â€” user object shape
+- `GET /auth/registration-terms` â€” response shape
+- `GET /catalog/products` â€” product list shape
+- `GET /catalog/offers` â€” offer list shape
+- `GET /organizations` â€” organization list shape
+- `GET /organizations/{orgId}/offers` â€” offer list shape
+- `GET /organizations/{orgId}/assets` â€” asset list shape
+- `GET /orders` â€” order list shape
+- `GET /orders/{id}` â€” order detail shape
+- `GET /reservations` â€” reservation list shape
+- `GET /health/live`, `GET /health/ready` â€” health response shapes
 
 No frontend types should be fabricated. The current normalization code makes defensive assumptions with fallback defaults.
 
 ---
 
-## 11. Handoff Preparation — Completed Frontend Work
+## 11. Handoff Preparation â€” Completed Frontend Work
 
 ### Completed
 - **SDK:** All 57 backend operations implemented in `packages/sdk/src/endpoints/backend.ts` using `backendRoutes` from `@mitdrone/types`. All response bodies typed as `unknown` (spec documents `{}`).
 - **Hooks:** TanStack Query hooks for all 57 operations in `packages/sdk/src/hooks/backend.ts` and `packages/sdk/src/hooks/public.ts`.
-- **Apps connected (17 operations):**
-  - **Marketplace-web:** Shop (`/catalog/products`), Search (`/catalog/products`), Product detail availability (`/catalog/offers/{offerId}/availability`), Account orders (`/orders`)
-  - **Vendor-dashboard:** Products (`/organizations/{orgId}/offers`), Inventory (`/organizations/{orgId}/assets`), Orders (`/orders`), Order detail + cancel (`/orders/{id}`, `/orders/{id}/cancel`)
-  - **Admin-dashboard:** Vendors (`/organizations`, `/organizations/{id}`), Vendor detail review/suspend (`/admin/organizations/{id}/review`, `/admin/organizations/{id}/suspend`), Orders (`/orders`), Order detail + cancel (`/orders/{id}`, `/orders/{id}/cancel`), Products moderation (`/admin/offers`, `/admin/offers/{id}/review`)
+- **Apps connected (55 operations):**
+  - **Marketplace-web:** Auth flows (register/verify/resend/forgot/reset/login/session/logout/logout-all/change-password), shop + search products, `/rent` + `/offers` offers, product availability, account orders + detail, account reservations (create/detail/release/quote/place order), vendor & service-provider applications + resubmit, profile sign-out-all
+  - **Vendor-dashboard:** Products (offers fetch/submit/archive, stock init/adjust, rental terms), Inventory (assets create/update/block/release/calendar), Orders + detail + cancel, Settings team members add/remove
+  - **Admin-dashboard:** Overview health live/ready, Vendors + detail (org review/suspend), Products (offer queue review, create product, checkout terms), Orders + detail + cancel
+- **Blocked (2 operations):** Vendor offer create/update (VO2/VO3) â€” backend requires `productId`; no vendor product-create endpoint. Create/edit UI intentionally remains on mock seller SDK.
 - **Auth/CSRF:** In-memory CSRF token on `AuthController`, captured from login/session responses, fail-closed on mutations, credentialed CORS with `mitdrone_session` cookie.
 - **Mock vs backend coexistence:** Both `useBackend*` and mock hooks always called; `useBackend` flag selects result. Avoids React Hooks rules-of-hooks violations.
-- **Verification:** 140 tests passing (auth 6/6, SDK 79/79 including 52 backend endpoint tests, mocks 16/16, apps 55 total). TypeScript passes on all 11 packages. All 3 production builds pass. ESLint passes (pre-existing `import/order` warnings only).
+- **Verification:** 171 tests passing across 9 test packages (utils 9, ui 6, data 6, mocks 16, sdk 79 incl. 52 backend endpoint tests, auth 6, marketplace 19, vendor 11, admin 19). TypeScript passes on all 11 packages. ESLint `--max-warnings=0` passes on all 11 packages. All 3 production builds pass.
 
 ### Current API Coverage
 
 | Category | Count | Percentage |
 |----------|-------|------------|
-| Total operations in live spec | 57 | — |
-| Complete (SDK + hook + app page) | 17 | 30.9% (of 55 non-health) |
-| Partial (SDK + hook, no app page) | 38 | 69.1% |
-| Not applicable to frontend (health probes) | 2 | — |
-| Not integrated (no SDK endpoint) | 0 | — |
+| Total operations in live spec | 57 | â€” |
+| Complete (SDK + hook + app page) | 55 | 96.5% |
+| Partial (SDK + hook, intentionally blocked) | 2 | 3.5% |
+| Not applicable to frontend | 0 | â€” |
+| Not integrated (no SDK endpoint) | 0 | â€” |
 
-### Outstanding Endpoint Integrations (38 Partial)
+### Outstanding Endpoint Integrations (2 Partial)
 
-See `docs/API-INTEGRATION-TRACKER.md` section "Remaining 38 Operations" for per-operation intended consumer, page/workflow, and dependencies.
+See `docs/API-INTEGRATION-TRACKER.md` for per-operation detail. Both are blocked on the same backend contract gap: `CreateOfferDto`/`UpdateOfferDto` require `productId`, and no vendor-facing product creation endpoint exists.
 
 ### Exact Backend Dependencies
 
@@ -210,20 +208,18 @@ See `docs/API-INTEGRATION-TRACKER.md` section "Remaining 38 Operations" for per-
 | 1 | `POST /auth/login`, `GET /auth/session` | Does response include `csrfToken`? |
 | 2 | `POST /auth/logout` | Spec lists `x-csrf-token` (required: true). SDK sets `csrf: true`. Consistent. |
 | 3 | `POST /admin/organizations/{id}/review`, `POST /admin/organizations/{id}/suspend`, `POST /organizations/{orgId}/offers`, `PATCH /organizations/{orgId}/offers/{id}`, `POST /organizations/{orgId}/offers/{id}/submit`, `POST /organizations/{orgId}/offers/{id}/archive`, `POST /admin/products`, `POST /admin/offers/{id}/review` | SDK sets `csrf: true` but spec does NOT list `x-csrf-token` parameter. Does backend validate CSRF on these? |
-| 4 | `POST /orders/{id}/cancel`, `POST /reservations/{id}/release` | Spec lists `x-csrf-token` parameter but SDK does NOT set `csrf: true`. Should SDK send CSRF header on these? |
+| 4 | `POST /orders/{id}/cancel`, `POST /reservations/{id}/release` | Spec lists `x-csrf-token` parameter; SDK now sets `csrf: true` on both. Confirm the backend enforces it. |
 | 5 | `POST /organizations/{orgId}/offers` | `CreateOfferDto` expects `{productId, mode, amountMinor, currency, rateUnit}`. No vendor-facing product creation endpoint exists. What is the intended vendor offer creation workflow? |
 | 6 | `POST /admin/products` | `CreateProductDto` expects `{name}` only. Is this a minimal product creation requiring follow-up offer creation via `/organizations/{orgId}/offers`? |
 | 7 | All GET responses | Response body shapes are undocumented `{}`. Frontend normalization makes speculative assumptions. |
 
-### Recommended Order for Completing Remaining Integrations
+### Recommended Order for Closing Out
 
-1. **Backend confirms CSRF contract** (questions 1-4 above) — blocks all authenticated mutation integration
-2. **Vendor offer creation** (question 5) — unblocks VO2-VO5 on vendor dashboard product create/edit
-3. **Response schemas** (question 7) — enables removing speculative normalization assumptions
-4. **Admin catalog** (question 6) — enables S4 product creation on admin dashboard
-5. **Remaining vendor operations** (I1-I11 excluding I7 which is complete) — inventory, assets, stock, rental terms
-6. **Buyer checkout flow** (R1, R4, R5, OR1, Ch1/Ch2) — reservations, orders, checkout terms
-7. **Organization management** (O3-O8) — vendor onboarding, memberships
-8. **Staff catalog** (S4, Ch1) — admin product creation, checkout terms configuration
+1. **Backend confirms CSRF contract** (questions 1-4 above) - determines whether the 8 extra `csrf: true` endpoints need adjustment.
+2. **Response schemas** (question 7) - replaces the speculative normalizers in all three apps with exact types.
+3. **Vendor offer creation** (question 5) - the only remaining operation gap (VO2/VO3).
+4. **Admin catalog follow-up** (question 6) - whether `POST /admin/products` (`{name}` only) is sufficient or needs offer linkage.
+5. **Pagination metadata confirmation** - admin/vendor tables assume `{ data, meta }`.
+6. **Live credentialed smoke test** - no real backend request has been made from the frontend yet.
 
 ---

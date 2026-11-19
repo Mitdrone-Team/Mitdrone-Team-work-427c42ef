@@ -3,6 +3,13 @@
 import { useAuth } from '@mitdrone/auth';
 import {
   getErrorMessage,
+  useBackendAdjustStock,
+  useBackendArchiveOffer,
+  useBackendConfigureRentalTerms,
+  useBackendInitializeStock,
+  useBackendRentalTerms,
+  useBackendStock,
+  useBackendSubmitOffer,
   useBackendVendorOffers,
   useBulkProducts,
   useDeleteProduct,
@@ -13,6 +20,12 @@ import {
   ConfirmDialog,
   DataTable,
   DataTableColumnHeader,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -20,12 +33,14 @@ import {
   DropdownMenuTrigger,
   ErrorState,
   Input,
+  Label,
   PageHeader,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  Skeleton,
   StatusBadge,
   toast,
 } from '@mitdrone/ui';
@@ -57,6 +72,307 @@ const STATUSES: [string, string][] = [
   ['archived', 'Archived'],
   ['draft', 'Draft'],
 ];
+
+type BackendOfferRow = Product & { version: number };
+
+function offerStatusToProductStatus(status: unknown): ProductStatus {
+  switch (String(status ?? '').toUpperCase()) {
+    case 'DRAFT':
+      return 'draft';
+    case 'SUBMITTED':
+      return 'pending_review';
+    case 'REJECTED':
+      return 'flagged';
+    case 'PUBLISHED':
+      return 'active';
+    case 'ARCHIVED':
+      return 'archived';
+    default:
+      return 'draft';
+  }
+}
+
+/** Normalize an undocumented backend offer row into the vendor `Product` shape. */
+function normalizeBackendOfferRow(raw: unknown): BackendOfferRow {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const productSrc = o.product && typeof o.product === 'object' ? o.product : o;
+  const prod = productSrc as Record<string, unknown>;
+  const imagesRaw = Array.isArray(prod.images) ? prod.images : [];
+  const images = imagesRaw.map((img) => {
+    const r = (img ?? {}) as Record<string, unknown>;
+    return { url: String(r.url ?? ''), alt: String(r.alt ?? '') };
+  });
+  const rawAmount = o.amountMinor ?? prod.amountMinor;
+  let amount = Number(prod.price ?? 0);
+  if (typeof rawAmount === 'string' && rawAmount.trim() !== '' && !Number.isNaN(Number(rawAmount))) {
+    amount = Number(rawAmount) / 100;
+  } else if (typeof rawAmount === 'number') {
+    amount = rawAmount / 100;
+  }
+  const mode = String(o.mode ?? prod.mode ?? 'SALE').toUpperCase();
+  const now = new Date().toISOString();
+  return {
+    id: String(o.id ?? prod.id ?? ''),
+    slug: String(o.slug ?? prod.slug ?? o.id ?? ''),
+    title: String(prod.title ?? prod.name ?? o.title ?? 'Untitled offer'),
+    description: String(prod.description ?? ''),
+    shortDescription: String(prod.shortDescription ?? ''),
+    kind: 'drone',
+    listingType: mode === 'RENTAL' ? 'rent' : 'sale',
+    condition: 'new',
+    status: offerStatusToProductStatus(o.status),
+    vendorId: String(o.vendorId ?? prod.vendorId ?? ''),
+    brand: String(prod.brand ?? ''),
+    categoryIds: [],
+    images,
+    price: {
+      amount,
+      currency: String(o.currency ?? prod.currency ?? 'NGN') as 'NGN' | 'USD' | 'GBP' | 'EUR',
+    },
+    compareAtPrice: undefined,
+    rental: undefined,
+    variants: [],
+    inventory: {
+      sku: String(prod.sku ?? ''),
+      quantity: Number(prod.quantity ?? 0),
+      lowStockThreshold: 5,
+      trackInventory: true,
+      allowBackorder: false,
+    },
+    specs: {},
+    tags: [],
+    rating: 0,
+    reviewCount: 0,
+    salesCount: 0,
+    featured: false,
+    createdAt: String(o.createdAt ?? now),
+    updatedAt: String(o.updatedAt ?? now),
+    version: Number(o.version ?? 1),
+  };
+}
+
+/** Per-offer backend actions (submit for review / archive) using the offer's version. */
+function BackendOfferActions({ orgId, offer }: { orgId: string; offer: BackendOfferRow }) {
+  const submit = useBackendSubmitOffer(orgId, offer.id);
+  const archive = useBackendArchiveOffer(orgId, offer.id);
+  const [pending, setPending] = useState<'submit' | 'archive'>();
+  const busy = submit.isPending || archive.isPending;
+
+  const stock = useBackendStock(orgId, offer.id);
+  const initStock = useBackendInitializeStock(orgId, offer.id);
+  const adjustStock = useBackendAdjustStock(orgId, offer.id);
+  const terms = useBackendRentalTerms(orgId, offer.id);
+  const saveTerms = useBackendConfigureRentalTerms(orgId, offer.id);
+
+  const [dialog, setDialog] = useState<'stock' | 'terms'>();
+  const stockVersion = Number((stock.data as { version?: number } | undefined)?.version ?? 1);
+  const hasStock = Boolean(stock.data);
+  const termsVersion = Number((terms.data as { version?: number } | undefined)?.version ?? 1);
+
+  const [onHand, setOnHand] = useState('0');
+  const [delta, setDelta] = useState('0');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [prep, setPrep] = useState('0');
+  const [buffer, setBuffer] = useState('0');
+  const [minDur, setMinDur] = useState('60');
+  const [maxDur, setMaxDur] = useState('10080');
+
+  const run = async (kind: 'submit' | 'archive') => {
+    setPending(kind);
+    try {
+      if (kind === 'submit') await submit.mutateAsync({ expectedVersion: offer.version });
+      else await archive.mutateAsync({ expectedVersion: offer.version });
+      toast.success(kind === 'submit' ? 'Submitted for review' : 'Offer archived');
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    } finally {
+      setPending(undefined);
+    }
+  };
+
+  const runStock = async () => {
+    try {
+      if (!hasStock) {
+        await initStock.mutateAsync({ kind: 'QUANTITY', initialOnHand: Number(onHand) || 0 });
+      } else {
+        await adjustStock.mutateAsync({
+          expectedVersion: stockVersion,
+          delta: Number(delta) || 0,
+          reason: adjustReason,
+        });
+      }
+      toast.success('Stock updated');
+      setDialog(undefined);
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
+
+  const runTerms = async () => {
+    try {
+      await saveTerms.mutateAsync({
+        preparationMinutes: Number(prep) || 0,
+        returnBufferMinutes: Number(buffer) || 0,
+        minimumDurationMinutes: Number(minDur) || 1,
+        maximumDurationMinutes: Number(maxDur) || 1,
+        expectedVersion: termsVersion,
+      });
+      toast.success('Rental terms saved');
+      setDialog(undefined);
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" aria-label={`Actions for ${offer.title}`}>
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={`/products/${offer.id}/edit`}>
+              <Pencil /> Edit
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDialog('stock')}>Manage stock</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDialog('terms')}>Rental terms</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          {offer.status === 'draft' || offer.status === 'flagged' ? (
+            <DropdownMenuItem disabled={busy} onSelect={() => void run('submit')}>
+              <ArchiveRestore /> Submit for review
+            </DropdownMenuItem>
+          ) : null}
+          {offer.status !== 'archived' ? (
+            <DropdownMenuItem disabled={busy} onSelect={() => void run('archive')}>
+              <Archive /> Archive
+            </DropdownMenuItem>
+          ) : null}
+          {pending ? (
+            <DropdownMenuItem disabled>
+              {pending === 'submit' ? 'Submitting…' : 'Archiving…'}
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={dialog === 'stock'} onOpenChange={(o) => !o && setDialog(undefined)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Manage stock — {offer.title}</DialogTitle>
+            <DialogDescription>
+              {hasStock
+                ? 'Adjust the on-hand quantity with a reason.'
+                : 'Create the stock record for this offer.'}
+            </DialogDescription>
+          </DialogHeader>
+          {stock.isPending ? (
+            <Skeleton className="h-20 w-full" />
+          ) : hasStock ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="stock-delta">Adjustment (+/-)</Label>
+                <Input
+                  id="stock-delta"
+                  inputMode="numeric"
+                  value={delta}
+                  onChange={(e) => setDelta(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="stock-reason">Reason</Label>
+                <Input
+                  id="stock-reason"
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="stock-onhand">Initial on-hand</Label>
+              <Input
+                id="stock-onhand"
+                inputMode="numeric"
+                value={onHand}
+                onChange={(e) => setOnHand(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(undefined)}>
+              Cancel
+            </Button>
+            <Button
+              loading={initStock.isPending || adjustStock.isPending}
+              onClick={() => void runStock()}
+            >
+              {hasStock ? 'Adjust' : 'Create stock'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialog === 'terms'} onOpenChange={(o) => !o && setDialog(undefined)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rental terms — {offer.title}</DialogTitle>
+            <DialogDescription>Timing rules applied to rentals of this offer.</DialogDescription>
+          </DialogHeader>
+          {terms.isPending ? (
+            <Skeleton className="h-24 w-full" />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="t-prep">Preparation (min)</Label>
+                <Input id="t-prep" inputMode="numeric" value={prep} onChange={(e) => setPrep(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="t-buffer">Return buffer (min)</Label>
+                <Input
+                  id="t-buffer"
+                  inputMode="numeric"
+                  value={buffer}
+                  onChange={(e) => setBuffer(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="t-min">Min duration (min)</Label>
+                <Input
+                  id="t-min"
+                  inputMode="numeric"
+                  value={minDur}
+                  onChange={(e) => setMinDur(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="t-max">Max duration (min)</Label>
+                <Input
+                  id="t-max"
+                  inputMode="numeric"
+                  value={maxDur}
+                  onChange={(e) => setMaxDur(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialog(undefined)}>
+              Cancel
+            </Button>
+            <Button loading={saveTerms.isPending} onClick={() => void runTerms()}>
+              Save terms
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 type Confirm = {
   kind: 'delete' | 'archive' | 'activate';
   ids: string[];
@@ -95,14 +411,19 @@ export function ProductTable({
   const products = backendData
     ? { data: backendData, meta: { page: url.page, pageSize: 10, total: backendData.length, totalPages: 1 }, isPending: false, isError: false, error: null, refetch: () => {} }
     : useBackend && v
-    ? {
-        data: (backend.data as unknown as Product[]) ?? [],
-        meta: { page: url.page, pageSize: 10, total: (backend.data as unknown as Product[]).length, totalPages: 1 },
-        isPending: backend.isPending,
-        isError: backend.isError,
-        error: backend.error as Error | null,
-        refetch: backend.refetch,
-      }
+    ? (() => {
+        const raw = backend.data as unknown as { data?: unknown[]; offers?: unknown[] } | unknown[] | undefined;
+        const rowsRaw = Array.isArray(raw) ? raw : (raw?.data ?? raw?.offers ?? []);
+        const rows = rowsRaw.map(normalizeBackendOfferRow);
+        return {
+          data: rows,
+          meta: { page: url.page, pageSize: 10, total: rows.length, totalPages: 1 },
+          isPending: backend.isPending,
+          isError: backend.isError,
+          error: backend.error as Error | null,
+          refetch: backend.refetch,
+        };
+      })()
     : mock;
   const bulk = useBulkProducts(v ?? '');
   const del = useDeleteProduct(v ?? '');
@@ -209,6 +530,9 @@ export function ProductTable({
         header: () => <span className="sr-only">Actions</span>,
         cell: ({ row }) => {
           const p = row.original;
+          if (useBackend && v) {
+            return <BackendOfferActions orgId={v} offer={p as BackendOfferRow} />;
+          }
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -248,7 +572,7 @@ export function ProductTable({
         },
       },
     ],
-    [],
+    [useBackend, v],
   );
 
   let productList: Product[];

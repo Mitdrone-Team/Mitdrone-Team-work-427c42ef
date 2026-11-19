@@ -58,9 +58,14 @@ export default async function SellPage({
               you when it opens.
             </p>
           ) : null}
-          <Button asChild size="lg">
-            <a href={`${env.NEXT_PUBLIC_VENDOR_URL}/register`}>List Your Drone</a>
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button asChild size="lg">
+              <a href={`${env.NEXT_PUBLIC_VENDOR_URL}/register`}>List Your Drone</a>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/sell/apply">Apply as a vendor</Link>
+            </Button>
+          </div>
         </div>
       </section>
       <section className="container space-y-6" aria-labelledby="paths">

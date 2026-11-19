@@ -3,12 +3,11 @@ import './globals.css';
 
 import { env } from '@/lib/env';
 
+import { MarketplaceChrome } from './marketplace-chrome';
 import { Providers } from './providers';
 
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
-
-import { MarketplaceChrome } from './marketplace-chrome';
 
 export const metadata: Metadata = {
   metadataBase: new URL(env.NEXT_PUBLIC_APP_URL),

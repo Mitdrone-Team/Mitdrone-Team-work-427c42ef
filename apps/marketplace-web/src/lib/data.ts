@@ -4,7 +4,7 @@ import { isApiError, type ProductQuery } from '@mitdrone/sdk';
 import { notFound } from 'next/navigation';
 import { cache } from 'react';
 
-import { normalizeBackendProductList, extractBackendItems } from './normalization';
+import { normalizeBackendOfferList, normalizeBackendProductList, extractBackendItems } from './normalization';
 import { REVALIDATE_SECONDS, serverApi } from './server-api';
 
 import type { ContentSection, PageParams, HealthLiveResponse, RegistrationTermsResponse } from '@mitdrone/types';
@@ -99,7 +99,12 @@ export const getBackendCatalogOffers = async (query: {
   page?: number;
   limit?: number;
 } = {}) => {
-  return (await serverApi()).backend.catalog.offers(query);
+  const raw = await (await serverApi()).backend.catalog.offers(query);
+  const offers = normalizeBackendOfferList(raw);
+  return {
+    data: offers,
+    meta: { total: offers.length, page: query.page ?? 1, totalPages: 1 },
+  };
 };
 
 export const getBackendCatalogProducts = async (query: {

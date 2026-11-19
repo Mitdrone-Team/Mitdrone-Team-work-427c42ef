@@ -95,6 +95,35 @@ export function normalizeBackendProductList(raw: unknown): Product[] {
   return items.map(normalizeBackendProduct);
 }
 
+export function normalizeBackendOffer(raw: unknown): Product {
+  if (!isRecord(raw)) return defaultProduct();
+  const productRaw = isRecord(raw.product) ? raw.product : raw;
+  const base = normalizeBackendProduct(productRaw);
+  const mode = getStr(raw, 'mode', getStr(productRaw, 'mode', 'SALE')).toUpperCase();
+
+  const rawAmount = raw.amountMinor ?? productRaw.amountMinor;
+  let amount = getNum(productRaw, 'price', 0);
+  if (typeof rawAmount === 'string' && rawAmount.trim() !== '' && !Number.isNaN(Number(rawAmount))) {
+    amount = Number(rawAmount) / 100;
+  } else if (typeof rawAmount === 'number') {
+    amount = rawAmount / 100;
+  }
+
+  const currency = getStr(raw, 'currency', getStr(productRaw, 'currency', 'NGN')) as CurrencyCode;
+  return {
+    ...base,
+    id: getStr(raw, 'id', base.id),
+    slug: getStr(raw, 'slug', base.slug || getStr(raw, 'id', base.id)),
+    listingType: mode === 'RENTAL' ? 'rent' : 'sale',
+    price: { amount, currency },
+  };
+}
+
+export function normalizeBackendOfferList(raw: unknown): Product[] {
+  const items = extractBackendItems(raw, ['data', 'offers', 'products']);
+  return items.map(normalizeBackendOffer);
+}
+
 export function extractBackendItems(
   raw: unknown,
   keys: string[] = ['data', 'offers', 'assets', 'orders', 'reservations', 'products'],

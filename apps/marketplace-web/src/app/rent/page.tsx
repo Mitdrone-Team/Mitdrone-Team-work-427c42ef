@@ -20,6 +20,7 @@ export default async function RentPage({ searchParams }: { searchParams: Promise
         title="Rent a Drone"
         description="Daily, weekly or monthly rentals from Mitdrone, verified sellers and verified owners."
         fixed={{ listingType: 'rent' }}
+        offers="RENTAL"
         breadcrumb={
           <p role="note" className="bg-accent/40 mb-6 rounded-lg border px-4 py-3 text-sm">
             Own a drone that sits idle? <strong>List Your Drone for Rent</strong> is coming soon.

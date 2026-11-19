@@ -5,7 +5,7 @@ import {
   api,
   getErrorMessage,
   useAdminVendors,
-  useBackendOrganizations,
+  useBackendOrgReviewQueue,
 } from '@mitdrone/sdk';
 import {
   Button,
@@ -38,7 +38,7 @@ import {
   type VendorAction,
 } from './vendor-actions';
 
-import type { Vendor, VendorStatus } from '@mitdrone/types';
+import type { Vendor, VendorStatus, VendorType } from '@mitdrone/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
 const STATUSES: [VendorStatus, string][] = [
@@ -56,6 +56,68 @@ const TYPES: [string, string][] = [
   ['renter', 'Renter'],
 ];
 
+/** UI status -> backend organization review status. */
+const BACKEND_STATUS: Partial<Record<VendorStatus, string>> = {
+  pending_review: 'PENDING',
+  approved: 'VERIFIED',
+  rejected: 'REJECTED',
+  suspended: 'SUSPENDED',
+};
+
+function mapBackendOrgStatus(status: unknown): VendorStatus {
+  switch (String(status ?? '').toUpperCase()) {
+    case 'VERIFIED':
+    case 'APPROVED':
+      return 'approved';
+    case 'REJECTED':
+      return 'rejected';
+    case 'SUSPENDED':
+      return 'suspended';
+    case 'DRAFT':
+      return 'draft';
+    default:
+      return 'pending_review';
+  }
+}
+
+function mapBackendOrgKind(kind: unknown, type: unknown): VendorType {
+  const k = String(kind ?? type ?? '').toUpperCase();
+  if (k === 'SERVICE_PROVIDER') return 'service_provider';
+  if (k === 'MANUFACTURER') return 'manufacturer';
+  if (k === 'DISTRIBUTOR' || k === 'DEALER') return 'dealer';
+  return 'individual_seller';
+}
+
+/** Normalize an undocumented backend organization row into the admin `Vendor` shape. */
+function normalizeOrg(raw: unknown, i: number): Vendor {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const createdAt = String(o.createdAt ?? o.insertedAt ?? new Date(0).toISOString());
+  const status = mapBackendOrgStatus(o.status);
+  return {
+    id: String(o.id ?? o.organizationId ?? i),
+    slug: String(o.slug ?? o.id ?? i),
+    name: String(o.name ?? o.organizationName ?? 'Unnamed organization'),
+    type: mapBackendOrgKind(o.kind ?? o.type, o.businessType),
+    status,
+    description: String(o.description ?? ''),
+    email: String(o.businessEmail ?? o.email ?? ''),
+    city: String(o.city ?? o.location ?? ''),
+    state: String(o.state ?? ''),
+    country: String(o.country ?? 'NG'),
+    verified: status === 'approved',
+    rating: 0,
+    reviewCount: 0,
+    productCount: Number(o.productCount ?? 0),
+    commissionRate: Number(o.commissionRate ?? 0),
+    ownerId: String(o.ownerId ?? o.id ?? i),
+    shipping: { handlingDays: 0, regions: [] },
+    returnPolicy: '',
+    kycStatus: 'submitted',
+    createdAt,
+    updatedAt: createdAt,
+  };
+}
+
 export function VendorsTable({
   useBackend = false,
 }: {
@@ -69,19 +131,40 @@ export function VendorsTable({
   const q = url.get('q');
   const filters = { ...(status ? { status } : {}), ...(type ? { type } : {}), ...(q ? { q } : {}) };
   const vendors = useVendorActions();
-  const backend = useBackendOrganizations({ page: url.page, limit: 10 });
+  const backendStatus = status ? BACKEND_STATUS[status] : undefined;
+  const backendKind = type === 'service_provider' ? 'SERVICE_PROVIDER' : type ? 'VENDOR' : undefined;
+  const backend = useBackendOrgReviewQueue({
+    page: url.page,
+    limit: 10,
+    ...(backendStatus ? { status: backendStatus } : {}),
+    ...(backendKind ? { kind: backendKind } : {}),
+  });
   const mock = useAdminVendors({ page: url.page, pageSize: 10, ...filters });
   const list = useBackend
-    ? {
-        data: (backend.data as unknown as { data: Vendor[]; meta: { page: number; pageSize: number; total: number; totalPages: number } }) ?? {
-          data: [],
-          meta: { page: 1, pageSize: 10, total: 0, totalPages: 1 },
-        },
-        isPending: backend.isPending,
-        isError: backend.isError,
-        error: backend.error as Error | null,
-        refetch: backend.refetch,
-      }
+    ? (() => {
+        const raw = backend.data as unknown as
+          | { data?: unknown[]; items?: unknown[]; meta?: { page?: number; pageSize?: number; total?: number; totalPages?: number } }
+          | unknown[]
+          | undefined;
+        const rowsRaw = Array.isArray(raw) ? raw : (raw?.data ?? raw?.items ?? []);
+        const rows = rowsRaw.map(normalizeOrg);
+        const meta = !Array.isArray(raw) ? raw?.meta : undefined;
+        return {
+          data: {
+            data: rows,
+            meta: {
+              page: meta?.page ?? url.page,
+              pageSize: meta?.pageSize ?? 10,
+              total: meta?.total ?? rows.length,
+              totalPages: meta?.totalPages ?? 1,
+            },
+          },
+          isPending: backend.isPending,
+          isError: backend.isError,
+          error: backend.error as Error | null,
+          refetch: backend.refetch,
+        };
+      })()
     : mock;
   const [bulk, setBulk] = useState<{ vendors: Vendor[]; done: () => void }>();
   const write = can('admin.write');

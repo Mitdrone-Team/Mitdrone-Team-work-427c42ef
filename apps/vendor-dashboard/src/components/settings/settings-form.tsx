@@ -2,7 +2,13 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ChangePasswordForm, useAuth } from '@mitdrone/auth';
-import { getErrorMessage, useUpdateVendorSettings, useVendorSettings } from '@mitdrone/sdk';
+import {
+  getErrorMessage,
+  useBackendOrgAddMember,
+  useBackendOrgRemoveMember,
+  useUpdateVendorSettings,
+  useVendorSettings,
+} from '@mitdrone/sdk';
 import {
   Button,
   Card,
@@ -12,8 +18,15 @@ import {
   CardTitle,
   ErrorState,
   Form,
+  Input,
+  Label,
   PageHeader,
   RootError,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   SelectField,
   Skeleton,
   StatusBadge,
@@ -22,6 +35,7 @@ import {
   toast,
 } from '@mitdrone/ui';
 import { NIGERIAN_STATES } from '@mitdrone/utils';
+import { useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -41,6 +55,95 @@ const schema = z.object({
 });
 type Input = z.input<typeof schema>;
 type Values = z.output<typeof schema>;
+
+function TeamMembers({ orgId }: { orgId: string }) {
+  const add = useBackendOrgAddMember(orgId);
+  const remove = useBackendOrgRemoveMember(orgId);
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<'CATALOG' | 'FULFILMENT' | 'COORDINATOR' | 'FINANCE'>(
+    'COORDINATOR',
+  );
+  const [removeId, setRemoveId] = useState('');
+
+  const addMember = async () => {
+    try {
+      await add.mutateAsync({ email, role });
+      toast.success('Team member added');
+      setEmail('');
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
+
+  const removeMember = async () => {
+    try {
+      await remove.mutateAsync(removeId);
+      toast.success('Team member removed');
+      setRemoveId('');
+    } catch (e) {
+      toast.error(getErrorMessage(e));
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Team</CardTitle>
+        <CardDescription>Invite staff and manage their access.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="min-w-[220px] flex-1 space-y-1.5">
+            <Label htmlFor="member-email">Email</Label>
+            <Input
+              id="member-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="teammate@example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="member-role">Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as typeof role)}>
+              <SelectTrigger id="member-role" className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CATALOG">Catalog</SelectItem>
+                <SelectItem value="FULFILMENT">Fulfilment</SelectItem>
+                <SelectItem value="COORDINATOR">Coordinator</SelectItem>
+                <SelectItem value="FINANCE">Finance</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button loading={add.isPending} disabled={!email} onClick={() => void addMember()}>
+            Add member
+          </Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 border-t pt-4">
+          <div className="min-w-[220px] flex-1 space-y-1.5">
+            <Label htmlFor="member-remove">User ID</Label>
+            <Input
+              id="member-remove"
+              value={removeId}
+              onChange={(e) => setRemoveId(e.target.value)}
+              placeholder="User ID to remove"
+            />
+          </div>
+          <Button
+            variant="outline"
+            loading={remove.isPending}
+            disabled={!removeId}
+            onClick={() => void removeMember()}
+          >
+            Remove member
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function Editor({ vendor, canEdit }: { vendor: Vendor; canEdit: boolean }) {
   const update = useUpdateVendorSettings(vendor.id);
@@ -152,6 +255,7 @@ export function SettingsView() {
       ) : (
         <Editor vendor={vendor.data} canEdit={can('vendor.settings.edit')} />
       )}
+      {user?.vendorId ? <TeamMembers orgId={user.vendorId} /> : null}
       <ChangePasswordForm />
     </>
   );

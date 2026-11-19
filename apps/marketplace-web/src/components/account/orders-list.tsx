@@ -11,7 +11,6 @@ import {
   cn,
 } from '@mitdrone/ui';
 import { formatDate, formatMoney } from '@mitdrone/utils';
-
 import { Package } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';

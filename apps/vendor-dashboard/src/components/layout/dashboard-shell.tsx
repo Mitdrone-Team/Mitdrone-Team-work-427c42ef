@@ -2,8 +2,6 @@
 
 import { ROLE_LABELS, RequireAuth, useAuth } from '@mitdrone/auth';
 import { api, useVendorSettings } from '@mitdrone/sdk';
-import { useState, useEffect } from 'react';
-
 import {
   Avatar,
   AvatarFallback,
@@ -44,7 +42,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { Suspense, type ReactNode } from 'react';
+import { Suspense, type ReactNode, useEffect, useState } from 'react';
 
 import { env } from '@/lib/env';
 import { useSidebarStore } from '@/stores/sidebar';

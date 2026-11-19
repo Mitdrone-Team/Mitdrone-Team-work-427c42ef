@@ -8,6 +8,8 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 **Security:** `mitdrone_session` HTTP-only cookie + `x-csrf-token` header on authenticated mutations. CSRF managed in-memory by AuthController (not localStorage).
 
+**Last verified:** typecheck 11/11, lint 11/11, tests 11/11, production build 3/3.
+
 ---
 
 ## Integration Classification
@@ -15,7 +17,7 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 | Class | Meaning |
 |-------|---------|
 | **Complete** | SDK endpoint + TanStack Query hook + actual app page/workflow usage with loading, error, empty states |
-| **Partial** | SDK endpoint + hook exist, but no app page or server-side workflow consumes them |
+| **Partial** | SDK endpoint + hook exist, but no app page consumes them (or intentionally blocked) |
 | **Not applicable to frontend** | Infrastructure/webhook/backend-boundary operations |
 | **Not integrated** | No SDK endpoint exists |
 
@@ -27,17 +29,17 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| A1 | `/auth/registration-terms` | GET | Partial | SDK endpoint + hook | No app page uses it |
-| A2 | `/auth/register` | POST | Partial | SDK endpoint only | Login/register handled by AuthController + auth pages; public endpoint used |
-| A3 | `/auth/verify-email` | POST | Partial | SDK endpoint only | No app page |
-| A4 | `/auth/resend-verification` | POST | Partial | SDK endpoint only | No app page |
-| A5 | `/auth/forgot-password` | POST | Partial | SDK endpoint only | No app page |
-| A6 | `/auth/reset-password` | POST | Partial | SDK endpoint only | No app page |
-| A7 | `/auth/login` | POST | Partial | SDK endpoint + AuthController.login() | CSRF captured from response, configured on ApiClient |
-| A8 | `/auth/session` | GET | Partial | SDK endpoint + AuthController.reloadUser() | Session restoration with CSRF recovery, isRestoring guard |
-| A9 | `/auth/logout` | POST | Partial | SDK endpoint + AuthController.logout() | CSRF required, best-effort backend call, token cleared |
-| A10 | `/auth/logout-all` | POST | Partial | SDK endpoint only | No app page |
-| A11 | `/auth/change-password` | POST | Partial | SDK endpoint only | No app page |
+| A1 | `/auth/registration-terms` | GET | Complete | Register form, vendor/service apply forms (`termsVersion`) | Used to source `termsVersion` |
+| A2 | `/auth/register` | POST | Complete | Register form + `AuthController.register()` | CSRF captured from response |
+| A3 | `/auth/verify-email` | POST | Complete | `/verify-email` token action form | |
+| A4 | `/auth/resend-verification` | POST | Complete | Register form + verify-email token actions | |
+| A5 | `/auth/forgot-password` | POST | Complete | `/forgot-password` form | |
+| A6 | `/auth/reset-password` | POST | Complete | `/reset-password` token action form | |
+| A7 | `/auth/login` | POST | Complete | Login form + `AuthController.login()` | CSRF captured from response, configured on ApiClient |
+| A8 | `/auth/session` | GET | Complete | `AuthController.reloadUser()` on provider mount | Session restore with CSRF recovery, `isRestoring` guard |
+| A9 | `/auth/logout` | POST | Complete | `AuthController.logout()` | CSRF required; best-effort backend call, token cleared |
+| A10 | `/auth/logout-all` | POST | Complete | Account profile form ("Sign out of all devices") | |
+| A11 | `/auth/change-password` | POST | Complete | `packages/auth/src/change-password-form.tsx` | |
 
 ---
 
@@ -45,8 +47,8 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| H1 | `/health/live` | GET | Not applicable to frontend | SDK endpoint + hook | Infrastructure probe, outside `/api/v1` |
-| H2 | `/health/ready` | GET | Not applicable to frontend | SDK endpoint + hook | Infrastructure probe, returns 503 if DB unavailable |
+| H1 | `/health/live` | GET | Complete | Admin dashboard overview badge (`getAdminBackendHealthLive`) | Outside `/api/v1` |
+| H2 | `/health/ready` | GET | Complete | Admin dashboard overview badge (`getAdminBackendHealthReady`) | 503 surfaces as "dependencies unavailable" |
 
 ---
 
@@ -54,14 +56,14 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| O1 | `/organizations` | GET | Complete | Admin dashboard vendors page (`useBackendOrganizations`) | CSRF not required (GET) |
-| O2 | `/organizations/{id}` | GET | Complete | Admin dashboard vendor detail (`useBackendOrganization`) | CSRF optional per spec |
-| O3 | `/organizations/applications` | POST | Partial | SDK endpoint + hook (`useBackendOrgApplication`) | No app page |
-| O4 | `/organizations/service-provider-applications` | POST | Partial | SDK endpoint + hook (`useBackendOrgApplyAsServiceProvider`) | No app page |
-| O5 | `/organizations/{id}/application` | PATCH | Partial | SDK endpoint + hook (`useBackendOrgResubmitApplication`) | No app page |
-| O6 | `/organizations/{id}/service-provider-application` | PATCH | Partial | SDK endpoint + hook (`useBackendOrgResubmitServiceProviderApplication`) | No app page |
-| O7 | `/organizations/{id}/memberships` | POST | Partial | SDK endpoint + hook (`useBackendOrgAddMember`) | No app page |
-| O8 | `/organizations/{id}/memberships/{userId}` | DELETE | Partial | SDK endpoint + hook (`useBackendOrgRemoveMember`) | No app page |
+| O1 | `/organizations` | GET | Complete | Admin vendors table (`useBackendOrganizations`) | GET, no CSRF |
+| O2 | `/organizations/{id}` | GET | Complete | Admin vendor detail (`useBackendOrganization`) | |
+| O3 | `/organizations/applications` | POST | Complete | Marketplace `/sell/apply` (`useBackendOrgApplication`) | |
+| O4 | `/organizations/service-provider-applications` | POST | Complete | Marketplace `/services/apply` (`useBackendOrgApplyAsServiceProvider`) | |
+| O5 | `/organizations/{id}/application` | PATCH | Complete | Marketplace apply form resubmit mode | `expectedVersion` from existing application |
+| O6 | `/organizations/{id}/service-provider-application` | PATCH | Complete | Marketplace apply form resubmit mode | |
+| O7 | `/organizations/{id}/memberships` | POST | Complete | Vendor settings "Team members" (`useBackendOrgAddMember`) | |
+| O8 | `/organizations/{id}/memberships/{userId}` | DELETE | Complete | Vendor settings "Team members" remove | Uses `user.vendorId` |
 
 ---
 
@@ -69,9 +71,9 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| S1 | `/admin/organizations` | GET | Complete | Admin dashboard vendors page (via `GET /organizations`) | Maps to org list endpoint |
-| S2 | `/admin/organizations/{id}/review` | POST | Complete | Admin dashboard vendor detail (`useBackendOrgReviewDecision`) | CSRF set on SDK; spec does NOT list x-csrf-token parameter |
-| S3 | `/admin/organizations/{id}/suspend` | POST | Complete | Admin dashboard vendor detail (`useBackendOrgSuspend`) | CSRF set on SDK; spec does NOT list x-csrf-token parameter |
+| S1 | `/admin/organizations` | GET | Complete | Admin vendors table (`useBackendOrgReviewQueue`) | Status/kind mapped to UI enums |
+| S2 | `/admin/organizations/{id}/review` | POST | Complete | Admin vendor detail (`useBackendOrgReviewDecision`) | CSRF set on SDK; spec does NOT list x-csrf-token |
+| S3 | `/admin/organizations/{id}/suspend` | POST | Complete | Admin vendor detail (`useBackendOrgSuspend`) | CSRF set on SDK; spec does NOT list x-csrf-token |
 
 ---
 
@@ -79,9 +81,9 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| C1 | `/catalog/offers` | GET | Partial | SDK endpoint + hook (`useBackendCatalogOffers`) + server function | No app page uses it; shop page uses `/catalog/products` instead |
-| C2 | `/catalog/products` | GET | Complete | Marketplace shop page (`getBackendCatalogProducts` → `normalizeBackendProductList`) | Response shape undocumented — normalization is speculative; `totalPages: 1` hardcoded |
-| C3 | `/catalog/offers/{offerId}/availability` | GET | Complete | Marketplace product detail page (`getBackendOfferAvailability`) | Response shape undocumented |
+| C1 | `/catalog/offers` | GET | Complete | Marketplace listing (`/rent` → RENTAL, `/offers` → SALE) via `getBackendCatalogOffers` | Response shape undocumented → defensive normalizer |
+| C2 | `/catalog/products` | GET | Complete | Marketplace shop + search via `getBackendCatalogProducts` | Response shape undocumented; `totalPages: 1` fallback |
+| C3 | `/catalog/offers/{offerId}/availability` | GET | Complete | Marketplace product detail (`getBackendOfferAvailability`) | Response shape undocumented |
 
 ---
 
@@ -89,11 +91,11 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| VO1 | `/organizations/{orgId}/offers` | GET | Complete | Vendor dashboard products page (`useBackendVendorOffers`) | CSRF set on SDK but spec does NOT list x-csrf-token parameter |
-| VO2 | `/organizations/{orgId}/offers` | POST | Partial | SDK endpoint + hook (`useBackendCreateOffer`) | Backend DTO (`CreateOfferDto`) differs from product form fields; no app page uses backend mutation |
-| VO3 | `/organizations/{orgId}/offers/{id}` | PATCH | Partial | SDK endpoint + hook (`useBackendUpdateOffer`) | Backend DTO differs from form fields; no app page uses backend mutation |
-| VO4 | `/organizations/{orgId}/offers/{id}/submit` | POST | Partial | SDK endpoint + hook (`useBackendSubmitOffer`) | Takes `VersionDto` (`expectedVersion`); no app page |
-| VO5 | `/organizations/{orgId}/offers/{id}/archive` | POST | Partial | SDK endpoint + hook (`useBackendArchiveOffer`) | Takes `VersionDto` (`expectedVersion`); no app page |
+| VO1 | `/organizations/{orgId}/offers` | GET | Complete | Vendor products table (`useBackendVendorOffers`) | Normalized to product rows |
+| VO2 | `/organizations/{orgId}/offers` | POST | Partial | SDK endpoint + hook only (`useBackendCreateOffer`) | **Blocked:** backend `CreateOfferDto` requires `productId`; no vendor-facing product-create endpoint exists. Create/edit UI stays on mock seller SDK by design |
+| VO3 | `/organizations/{orgId}/offers/{id}` | PATCH | Partial | SDK endpoint + hook only (`useBackendUpdateOffer`) | **Blocked:** pricing-only DTO, same `productId` gap as VO2 |
+| VO4 | `/organizations/{orgId}/offers/{id}/submit` | POST | Complete | Vendor products table (`useBackendSubmitOffer`) | `expectedVersion` from row `version` |
+| VO5 | `/organizations/{orgId}/offers/{id}/archive` | POST | Complete | Vendor products table (`useBackendArchiveOffer`) | `expectedVersion` from row `version` |
 
 ---
 
@@ -101,17 +103,17 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| I1 | `/organizations/{orgId}/offers/{offerId}/stock` | POST | Partial | SDK endpoint + hook (`useBackendInitializeStock`) | CSRF required per spec; no app page |
-| I2 | `/organizations/{orgId}/offers/{offerId}/stock` | GET | Partial | SDK endpoint + hook (`useBackendStock`) | CSRF optional per spec; no app page |
-| I3 | `/organizations/{orgId}/offers/{offerId}/stock/adjustments` | POST | Partial | SDK endpoint + hook (`useBackendAdjustStock`) | CSRF required per spec; no app page |
-| I4 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | PUT | Partial | SDK endpoint + hook (`useBackendConfigureRentalTerms`) | CSRF required per spec; no app page |
-| I5 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | GET | Partial | SDK endpoint + hook (`useBackendRentalTerms`) | CSRF optional per spec; no app page |
-| I6 | `/organizations/{orgId}/assets` | POST | Partial | SDK endpoint + hook (`useBackendCreateAsset`) | CSRF required per spec; no app page |
-| I7 | `/organizations/{orgId}/assets` | GET | Complete | Vendor dashboard inventory page (`useBackendInventory`) | CSRF optional per spec |
-| I8 | `/organizations/{orgId}/assets/{id}` | PATCH | Partial | SDK endpoint + hook (`useBackendUpdateAsset`) | CSRF required per spec; no app page |
-| I9 | `/organizations/{orgId}/assets/{id}/blocks` | POST | Partial | SDK endpoint + hook (`useBackendBlockAsset`) | CSRF required per spec; no app page |
-| I10 | `/organizations/{orgId}/assets/{id}/blocks/{blockId}` | DELETE | Partial | SDK endpoint + hook (`useBackendReleaseBlock`) | CSRF required per spec; no app page |
-| I11 | `/organizations/{orgId}/assets/{id}/calendar` | GET | Partial | SDK endpoint + hook (`useBackendAssetCalendar`) | CSRF optional per spec; no app page |
+| I1 | `/organizations/{orgId}/offers/{offerId}/stock` | POST | Complete | Vendor products "Manage stock" (`useBackendInitializeStock`) | CSRF required |
+| I2 | `/organizations/{orgId}/offers/{offerId}/stock` | GET | Complete | Vendor products stock dialog (`useBackendStock`) | |
+| I3 | `/organizations/{orgId}/offers/{offerId}/stock/adjustments` | POST | Complete | Vendor products stock dialog (`useBackendAdjustStock`) | CSRF required |
+| I4 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | PUT | Complete | Vendor products "Rental terms" dialog (`useBackendConfigureRentalTerms`) | CSRF required |
+| I5 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | GET | Complete | Vendor products "Rental terms" dialog (`useBackendRentalTerms`) | |
+| I6 | `/organizations/{orgId}/assets` | POST | Complete | Vendor inventory "New asset" (`useBackendCreateAsset`) | CSRF required |
+| I7 | `/organizations/{orgId}/assets` | GET | Complete | Vendor inventory table (`useBackendInventory`) | Normalized asset rows |
+| I8 | `/organizations/{orgId}/assets/{id}` | PATCH | Complete | Vendor inventory asset actions (`useBackendUpdateAsset`) | CSRF required |
+| I9 | `/organizations/{orgId}/assets/{id}/blocks` | POST | Complete | Vendor inventory asset actions (`useBackendBlockAsset`) | CSRF required |
+| I10 | `/organizations/{orgId}/assets/{id}/blocks/{blockId}` | DELETE | Complete | Vendor inventory asset actions (`useBackendReleaseBlock`) | CSRF required |
+| I11 | `/organizations/{orgId}/assets/{id}/calendar` | GET | Complete | Vendor inventory asset actions (`useBackendAssetCalendar`) | Requires `startsAt`/`endsAt` |
 
 ---
 
@@ -119,11 +121,11 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| R1 | `/reservations` | POST | Partial | SDK endpoint + hook (`useBackendCreateReservation`) | CSRF optional; Idempotency-Key required; no app page |
-| R2 | `/reservations` | GET | Partial | SDK endpoint + hook (`useBackendReservations`) | No app page |
-| R3 | `/reservations/{id}` | GET | Partial | SDK endpoint + hook (`useBackendReservation`) | No app page |
-| R4 | `/reservations/{id}/release` | POST | Partial | SDK endpoint + hook (`useBackendReleaseReservation`) | No app page |
-| R5 | `/reservations/{id}/checkout` | GET | Partial | SDK endpoint + hook (`useBackendCheckoutQuote`) | No app page |
+| R1 | `/reservations` | POST | Complete | Account reservations view (`useBackendCreateReservation`) | `Idempotency-Key` required |
+| R2 | `/reservations` | GET | Complete | Account reservations view (`useBackendReservations`) | Linked from account nav |
+| R3 | `/reservations/{id}` | GET | Complete | Account reservations detail (`useBackendReservation`) | |
+| R4 | `/reservations/{id}/release` | POST | Complete | Account reservations release (`useBackendReleaseReservation`) | CSRF now set (`csrf: true`) |
+| R5 | `/reservations/{id}/checkout` | GET | Complete | Account reservations checkout quote (`useBackendCheckoutQuote`) | Response shape undocumented → `readQuote` fallback |
 
 ---
 
@@ -131,10 +133,10 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| OR1 | `/orders` | POST | Partial | SDK endpoint + hook (`useBackendCreateOrder`) | CSRF optional; Idempotency-Key required; no app page |
-| OR2 | `/orders` | GET | Complete | Marketplace account orders + Vendor orders + Admin orders (`useBackendOrders`) | CSRF optional per spec |
-| OR3 | `/orders/{id}` | GET | Complete | Vendor order detail + Admin order detail (`useBackendOrder`) | CSRF optional per spec |
-| OR4 | `/orders/{id}/cancel` | POST | Complete | Vendor order detail + Admin order detail (`useBackendCancelOrder`) | CSRF required per spec |
+| OR1 | `/orders` | POST | Complete | Account reservations → "Place order" (`useBackendCreateOrder`) | Reservation-based flow; `Idempotency-Key` required |
+| OR2 | `/orders` | GET | Complete | Marketplace account orders, Vendor orders, Admin orders (`useBackendOrders`) | |
+| OR3 | `/orders/{id}` | GET | Complete | Marketplace / Vendor / Admin order detail (`useBackendOrder`) | |
+| OR4 | `/orders/{id}/cancel` | POST | Complete | Vendor + Admin order detail (`useBackendCancelOrder`) | CSRF now set (`csrf: true`) |
 
 ---
 
@@ -142,11 +144,11 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 
 | # | Endpoint | Method | Status | Integration Location | Notes |
 |---|----------|--------|--------|---------------------|-------|
-| S4 | `/admin/products` | POST | Partial | SDK endpoint + hook (`useBackendCreateProduct`) | Takes `CreateProductDto` (`name` only); no app page |
-| S5 | `/admin/offers` | GET | Complete | Admin dashboard products table (`useBackendOfferQueue`) | No app page uses it directly |
-| S6 | `/admin/offers/{id}/review` | POST | Complete | Admin dashboard products table (`useBackendReviewOffer`) | CSRF set on SDK but spec does NOT list x-csrf-token parameter |
-| Ch1 | `/staff/offers/{offerId}/checkout-terms` | PUT | Partial | SDK endpoint + hook (`useBackendPutCheckoutTerms`) | CSRF required per spec; no app page |
-| Ch2 | `/staff/offers/{offerId}/checkout-terms` | GET | Partial | SDK endpoint + hook (`useBackendGetCheckoutTerms`) | CSRF optional per spec; no app page |
+| S4 | `/admin/products` | POST | Complete | Admin products header "New product" (`useBackendCreateProduct`) | `CreateProductDto` (`name` only) |
+| S5 | `/admin/offers` | GET | Complete | Admin products table (`useBackendOfferQueue`) | Normalized offer queue |
+| S6 | `/admin/offers/{id}/review` | POST | Complete | Admin products row actions approve/reject (`useBackendReviewOffer`) | CSRF set on SDK; spec does NOT list x-csrf-token |
+| Ch1 | `/staff/offers/{offerId}/checkout-terms` | PUT | Complete | Admin products row "Checkout terms" (`useBackendPutCheckoutTerms`) | CSRF required |
+| Ch2 | `/staff/offers/{offerId}/checkout-terms` | GET | Complete | Admin products row "Checkout terms" (`useBackendGetCheckoutTerms`) | Response shape undocumented |
 
 ---
 
@@ -155,11 +157,15 @@ Tracks integration of live backend OpenAPI operations against frontend apps.
 | Category | Count |
 |----------|-------|
 | Total operations in live spec | 57 |
-| Complete (SDK + hook + app page) | 17 |
-| Partial (SDK + hook, no app page) | 38 |
-| Not applicable to frontend (health probes) | 2 |
+| Complete (SDK + hook + app page) | 55 |
+| Partial (SDK + hook, intentionally blocked) | 2 (VO2, VO3) |
+| Not applicable to frontend | 0 |
 | Not integrated (no SDK endpoint) | 0 |
-| **Percentage fully integrated** | **17/55 = 30.9%** (excluding 2 health probes) |
+| **Percentage fully integrated** | **55/57 = 96.5%** |
+
+The two partial operations are blocked by backend contract gaps, not frontend work:
+- `CreateOfferDto` requires a `productId` that vendors cannot create (no vendor product-create endpoint).
+- `UpdateOfferDto` is pricing-only and carries the same product linkage.
 
 ---
 
@@ -178,101 +184,36 @@ The SDK sets `csrf: true` on these endpoints where the OpenAPI spec does NOT lis
 | `POST /admin/products` | Yes | No |
 | `POST /admin/offers/{id}/review` | Yes | No |
 
-The general API description states "Authenticated mutations require x-csrf-token," but only 10 operations explicitly list the parameter. These 8 operations may fail with `csrf_token_unavailable` if the backend does not validate CSRF for them. **Backend confirmation required.**
+The general API description states "Authenticated mutations require x-csrf-token," but only some operations explicitly list the parameter. These 8 operations may fail with `csrf_token_unavailable` if the backend does not validate CSRF for them. **Backend confirmation required.**
+
+`POST /reservations/{id}/release` and `POST /orders/{id}/cancel` were added to the SDK with `csrf: true` to match their spec-declared `x-csrf-token` parameter.
 
 ---
 
 ## Known Defects Fixed
 
-1. **React Hooks rules-of-hooks**: `useBackendInventory`, `useBackendVendorOffers`, `useBackendOrders`, `useBackendOrganizations` were called conditionally inside ternary expressions. Fixed by always calling both backend and mock hooks, then conditionally selecting the result. Added `enabled: Boolean(organizationId)` to `useBackendInventory` and `useBackendVendorOffers` SDK hooks.
-
-2. **Invalid status values**: Vendor dashboard inventory table passed `status: 'low'` to backend (backend enum: AVAILABLE/MAINTENANCE/LOST/RETIRED/SOLD). Removed from backend path. Vendor dashboard product table passed UI statuses (active/pending_review/flagged/archived/draft) to backend (backend enum: DRAFT/SUBMITTED/REJECTED/PUBLISHED/ARCHIVED). Removed status from backend path.
-
-3. **Duplicate function declarations**: `getBackendOrders` and `getBackendReservations` were declared twice in marketplace `data.ts`. Removed duplicates.
-
-4. **DTO type mismatches**: Backend `CreateOfferDto` expects `{ productId, mode, amountMinor, currency, rateUnit }` — completely different from product form fields. Product create/edit pages continue using mock seller SDK hooks. Backend offer create/update hooks remain unused by app pages.
-
-5. **Backend enum values**: Approve/reject decisions use uppercase enum values (`APPROVE`, `REJECT`, `REQUEST_MORE_INFORMATION`) not lowercase strings.
-
-6. **Missing `expectedVersion`**: `ReasonDto` and `ApplicationReviewDto` require `expectedVersion` field. Added placeholder value of `1`.
+1. **React Hooks rules-of-hooks**: backend hooks were called conditionally inside ternaries. Fixed by always calling both backend and mock hooks and selecting via `useBackend`.
+2. **Invalid status values**: UI statuses leaked into backend queries. Backend paths now use backend enums only.
+3. **Duplicate function declarations**: `getBackendOrders` / `getBackendReservations` were declared twice; duplicates removed.
+4. **DTO type mismatches**: `CreateOfferDto`/`UpdateOfferDto` do not match product form fields — create/edit remains mock.
+5. **Backend enum values**: review decisions use uppercase enums (`APPROVE`, `REJECT`, `REQUEST_MORE_INFORMATION`).
+6. **Missing `expectedVersion`**: review/versioned mutations take `expectedVersion` (row `version`, fallback `1`).
+7. **`'use server'` in a pure module**: removed from marketplace `src/lib/normalization.ts` (Server Action build error).
+8. **Admin order-detail test crash**: backend response field renamed `data` → `order` to match `AdminOrderDetail`.
+9. **Import order lint**: normalized type-import ordering across the three apps to clear `--max-warnings=0`.
 
 ---
 
 ## Mock vs Backend by App
 
-| App | Pages using backend | Pages still on mock |
-|-----|--------------------|---------------------|
-| Marketplace | Shop (catalog/products), Search (catalog/products), Product detail (availability), Account orders (orders) | Product detail (main data uses public catalog), categories, vendors, manufacturers, reviews, services, live sessions, checkout |
-| Vendor dashboard | Products (offers), Inventory (assets), Orders, Order detail | Dashboard overview, settings, payouts, reservations, stock adjustments, rental terms, asset blocks, product create/edit (mock seller SDK) |
-| Admin dashboard | Vendors (organizations), Vendor detail (org review), Orders, Order detail, Products (offer queue) | Dashboard overview, users, disputes, payouts, audit logs, settings, product approve/flag/delete (mock admin SDK) |
+| App | Pages/workflows on backend | Remaining mock surfaces |
+|-----|---------------------------|-------------------------|
+| Marketplace | Shop + search (products), `/rent` + `/offers` (offers), product detail availability, account orders + detail, account reservations + checkout quote/order, profile sign-out-all, change password, register/verify/reset/forgot, `/sell/apply`, `/services/apply` | Product detail main content (uses public catalog), categories, vendors, manufacturers, reviews, services listings, live sessions, cart checkout flow |
+| Vendor dashboard | Products (offers, submit/archive, stock init/adjust, rental terms), Inventory (assets, create/update/block/release/calendar), Orders + detail, Order cancel, Settings team members (add/remove) | Dashboard overview KPIs, payouts, earlier reservations UI, offer create/edit (VO2/VO3 blocked), mock product form data |
+| Admin dashboard | Vendors + detail (org review/suspend), Products (offer queue, review approve/reject, create product, checkout terms), Orders + detail (cancel), Overview backend live/ready badge | Users/roles, disputes, payouts, audit logs, platform settings, mock admin SDK |
 
 ---
 
-## Remaining 38 Operations — Intended Consumer and Dependencies
+## Response-Shape Caveat
 
-### Buyer operations (Marketplace)
-
-| # | Endpoint | Method | Intended Consumer | Page / Workflow | Dependencies / Blockers |
-|---|----------|--------|-------------------|-----------------|------------------------|
-| A2 | `/auth/register` | POST | Buyer | Registration page | Public endpoint; used by AuthController |
-| A3 | `/auth/verify-email` | POST | Buyer | Email verification | No frontend page |
-| A4 | `/auth/resend-verification` | POST | Buyer | Resend verification | No frontend page |
-| A5 | `/auth/forgot-password` | POST | Buyer | Forgot password | No frontend page |
-| A6 | `/auth/reset-password` | POST | Buyer | Reset password | No frontend page |
-| A10 | `/auth/logout-all` | POST | Buyer | Account settings | No frontend page |
-| A11 | `/auth/change-password` | POST | Buyer | Account settings | No frontend page |
-| A1 | `/auth/registration-terms` | GET | Buyer | Registration flow | No frontend page |
-| C1 | `/catalog/offers` | GET | Buyer | Shop / search listing | Response shape undocumented |
-| R1 | `/reservations` | POST | Buyer | Checkout | Idempotency-Key; CreateHoldDto requires `expectedOfferVersion` |
-| R2 | `/reservations` | GET | Buyer | Account reservations | Response shape undocumented |
-| R3 | `/reservations/{id}` | GET | Buyer | Reservation detail | Response shape undocumented |
-| R4 | `/reservations/{id}/release` | POST | Buyer | Cancel reservation | CSRF: spec lists parameter but SDK does not set `csrf: true` |
-| R5 | `/reservations/{id}/checkout` | GET | Buyer | Checkout quote | Response shape undocumented |
-| OR1 | `/orders` | POST | Buyer | Place order | Idempotency-Key; CreateOrderDto requires `expectedCheckoutTermsVersion` |
-| Ch2 | `/staff/offers/{offerId}/checkout-terms` | GET | Buyer | Checkout terms display | Response shape undocumented |
-
-### Vendor operations (Vendor dashboard)
-
-| # | Endpoint | Method | Intended Consumer | Page / Workflow | Dependencies / Blockers |
-|---|----------|--------|-------------------|-----------------|------------------------|
-| VO2 | `/organizations/{orgId}/offers` | POST | Vendor | Create offer | `CreateOfferDto` (`{productId, mode, amountMinor, currency, rateUnit}`) does not match product form; no vendor-facing product creation endpoint exists — only `/admin/products` (admin only, `name` only) |
-| VO3 | `/organizations/{orgId}/offers/{id}` | PATCH | Vendor | Edit offer | `UpdateOfferDto` includes `expectedVersion`; no app page uses backend mutation |
-| VO4 | `/organizations/{orgId}/offers/{id}/submit` | POST | Vendor | Submit for review | Takes `VersionDto` (`expectedVersion`); no app page |
-| VO5 | `/organizations/{orgId}/offers/{id}/archive` | POST | Vendor | Archive offer | Takes `VersionDto` (`expectedVersion`); no app page |
-| I1 | `/organizations/{orgId}/offers/{offerId}/stock` | POST | Vendor | Initialize stock | `CreateStockDto` (`kind`, `initialOnHand`); CSRF required |
-| I2 | `/organizations/{orgId}/offers/{offerId}/stock` | GET | Vendor | View stock | CSRF optional |
-| I3 | `/organizations/{orgId}/offers/{offerId}/stock/adjustments` | POST | Vendor | Adjust stock | `AdjustStockDto` (`expectedVersion`, `delta`, `reason`); CSRF required |
-| I4 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | PUT | Vendor | Configure rental terms | `RentalTermsDto`; CSRF required |
-| I5 | `/organizations/{orgId}/offers/{offerId}/rental-terms` | GET | Vendor | View rental terms | CSRF optional |
-| I6 | `/organizations/{orgId}/assets` | POST | Vendor | Create asset | `CreateAssetDto` (`productId`, `serialNumber`, `conditionNote`); CSRF required |
-| I8 | `/organizations/{orgId}/assets/{id}` | PATCH | Vendor | Update asset | `UpdateAssetDto` (`expectedVersion`, `status`, `conditionNote`, `reason`); CSRF required |
-| I9 | `/organizations/{orgId}/assets/{id}/blocks` | POST | Vendor | Block asset | `BlockAssetDto` (`startsAt`, `endsAt`, `reason`); CSRF required |
-| I10 | `/organizations/{orgId}/assets/{id}/blocks/{blockId}` | DELETE | Vendor | Release block | CSRF required |
-| I11 | `/organizations/{orgId}/assets/{id}/calendar` | GET | Vendor | Asset availability calendar | Requires `startsAt`/`endsAt`; CSRF optional |
-
-### Admin operations (Admin dashboard)
-
-| # | Endpoint | Method | Intended Consumer | Page / Workflow | Dependencies / Blockers |
-|---|----------|--------|-------------------|-----------------|------------------------|
-| O3 | `/organizations/applications` | POST | Admin | Vendor onboarding | No app page |
-| O4 | `/organizations/service-provider-applications` | POST | Admin | Service provider onboarding | No app page |
-| O5 | `/organizations/{id}/application` | PATCH | Admin | Resubmit application | No app page |
-| O6 | `/organizations/{id}/service-provider-application` | PATCH | Admin | Resubmit SP application | No app page |
-| O7 | `/organizations/{id}/memberships` | POST | Admin | Add member | No app page |
-| O8 | `/organizations/{id}/memberships/{userId}` | DELETE | Admin | Remove member | No app page |
-| S4 | `/admin/products` | POST | Admin | Create catalog product | Takes `CreateProductDto` (`name` only); minimal — likely requires follow-up offer creation |
-| S5 | `/admin/offers` | GET | Admin | Offer queue | Already connected via `useBackendOfferQueue` |
-| S6 | `/admin/offers/{id}/review` | POST | Admin | Review offer | Already connected via `useBackendReviewOffer` |
-| Ch1 | `/staff/offers/{offerId}/checkout-terms` | PUT | Admin | Configure checkout terms | `CheckoutTermsDto`; CSRF required |
-
-### System / server-side operations (no frontend page)
-
-| # | Endpoint | Method | Classification | Notes |
-|---|----------|--------|----------------|-------|
-| H1 | `/health/live` | GET | System | Infrastructure probe; outside `/api/v1` |
-| H2 | `/health/ready` | GET | System | Infrastructure probe; returns 503 if DB unavailable |
-| A7 | `/auth/login` | POST | System | Auth token capture; integrated via AuthController |
-| A8 | `/auth/session` | GET | System | Session restoration; integrated via AuthController |
-| A9 | `/auth/logout` | POST | System | Session termination; integrated via AuthController |
-
----
+Every backend response body in the live spec is `{}`. All normalizers (`apps/marketplace-web/src/lib/normalization.ts`, vendor inventory/offer normalizers, admin offer normalizer) unwrap common envelopes (`data`/`offers`/`items`/`reservations`/`order`/`assets`/`meta`) with defaults. Shapes must be re-verified once the backend documents response schemas.

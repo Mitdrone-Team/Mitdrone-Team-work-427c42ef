@@ -23,6 +23,7 @@ export default async function OffersPage({
         title="Deals of the Week"
         description="Limited-time prices from verified sellers. When they are gone, they are gone."
         fixed={{ deal: true }}
+        offers="SALE"
       />
     </Suspense>
   );

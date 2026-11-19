@@ -67,6 +67,9 @@ export default async function ServicesPage({
           <Link href="/services/post-project" className="rounded-md border px-4 py-2 font-medium">
             Post a project
           </Link>
+          <Link href="/services/apply" className="rounded-md border px-4 py-2 font-medium">
+            Become a provider
+          </Link>
         </div>
       </header>
       <nav aria-label="Service categories" className="space-y-3">
